@@ -257,22 +257,30 @@ Every chain was invisible to traditional single-sink scanners.
 
 > A user types a special string into a chat box. The logging library fetches software from the internet and runs it. Silently. No warning.
 
+**What a traditional scanner sees:**
+```
+$ semgrep --config auto ./log4j-webapp
+
+  MEDIUM  User input flows into log statement    SearchController.java:42
+          logger.info(msg) — consider sanitizing user input
+
+  1 finding · Severity: Medium · No action required
+```
+**Why it misses:** The scanner sees `logger.info()` as a log sink — not a code execution sink. The JNDI resolution happens inside Log4j internals, outside the application code boundary. Single-hop analysis stops at the function call.
+
+**What the chain detector finds:**
 ```
 $ npx vuln-chain-detector scan --target ./log4j-webapp --scanner sast
 
-  Parsing 847 files...
-  Building taint graph...
-
 CHAIN DETECTED ────────────────────────────────────────────────────
-  ID:       CHAIN-l4j-001     Pattern: http-input-to-jndi-exec
-  Severity: Critical          Score:   10.0     Hops: 4
+  Severity: Critical    Score: 10.0    Hops: 4
 
   Step 1  SOURCE      req.getHeader("X-Api-Version")      SearchController.java:34
   Step 2  PASSTHROUGH "API ver: " + userInput              SearchController.java:41
   Step 3  PASSTHROUGH logger.info(msg)                     SearchController.java:42
-  Step 4  SINK        Log4j resolves JNDI → fetches ldap://attacker.io/Exploit
+  Step 4  SINK        Log4j JNDI → fetches ldap://attacker.io/Exploit
 
-  Fix: Upgrade log4j-core to >=2.17.1. Set log4j2.formatMsgNoLookups=true.
+  Fix: Upgrade log4j-core >=2.17.1. Set log4j2.formatMsgNoLookups=true.
 ────────────────────────────────────────────────────────────────────
 ```
 
@@ -282,21 +290,28 @@ CHAIN DETECTED ─────────────────────�
 
 > A hacker took over a popular npm package and added hidden code that hunted for a Bitcoin wallet and stole it. Ran silently on every `npm install`.
 
+**What a traditional scanner sees:**
+```
+$ npm audit && snyk test
+
+  found 0 vulnerabilities
+  ✓ Tested 1842 dependencies for known issues, no issues found.
+```
+**Why it misses:** The malicious version had no CVE yet. CVE databases are reactive — a freshly poisoned package is unknown by definition. The payload was also encrypted, making static analysis impossible. SCA tools compare version numbers; they cannot analyse what a postinstall script does.
+
+**What the chain detector finds:**
 ```
 $ npx vuln-chain-detector scan --target ./node_modules/event-stream --scanner sca
 
-  Scanning dependency tree...
-
 CHAIN DETECTED ────────────────────────────────────────────────────
-  ID:       CHAIN-evs-001     Pattern: sca-postinstall-to-credential-exfil
-  Severity: Critical          Score:   9.8      Hops: 4
+  Severity: Critical    Score: 9.8     Hops: 4
 
   Step 1  SOURCE      package.json scripts.postinstall     flatmap-stream/package.json:6
   Step 2  PASSTHROUGH Encrypted payload decrypted runtime  index.min.js:1
   Step 3  STORE       Reads ~/.config/copay/profile/       index.min.js:1
   Step 4  SINK        HTTP POST wallet data → 111.90.151.134:8080/checker
 
-  Fix: npm install --ignore-scripts. Audit all postinstall hooks.
+  Fix: npm install --ignore-scripts. Pin to verified SHA.
 ────────────────────────────────────────────────────────────────────
 ```
 
@@ -306,46 +321,61 @@ CHAIN DETECTED ─────────────────────�
 
 > Hackers added one line to a popular CI tool's download script: send all your secrets to our server. Ran undetected for two months in thousands of CI/CD pipelines.
 
+**What a traditional scanner sees:**
+```
+$ trufflehog filesystem ./codecov.sh && bandit -r ./codecov.sh
+
+  No secrets found.
+  LOW  subprocess call — consider subprocess module    codecov.sh:207
+
+  0 secrets · 1 Low · No action required
+```
+**Why it misses:** Secrets scanners look for hardcoded values — there are none. The script reads secrets from the runtime environment. Static tools see `curl` at line 207 as a generic HTTP call. They cannot connect "reads all env vars at :171" → "appends at :198" → "POSTs at :207" as a three-step exfiltration chain.
+
+**What the chain detector finds:**
 ```
 $ npx vuln-chain-detector scan --target ./codecov.sh --scanner secrets,sca
 
-  Tracing environment variable flows...
-
 CHAIN DETECTED ────────────────────────────────────────────────────
-  ID:       CHAIN-ccv-001     Pattern: ci-env-to-network-exfil
-  Severity: Critical          Score:   10.0     Hops: 3
-  CI/CD multiplier: ×1.2 active
+  Severity: Critical    Score: 10.0    Hops: 3    CI/CD multiplier ×1.2
 
   Step 1  SOURCE      env_vars=$(env)                      codecov.sh:171
           SOURCE      git_list=$(git remote -v)            codecov.sh:167
   Step 2  PASSTHROUGH upload_file appended with env dump   codecov.sh:198
-  Step 3  SINK        curl POST http://[attacker]/upload   codecov.sh:207
-          → GITHUB_TOKEN, AWS_*, NPM_TOKEN all captured
+  Step 3  SINK        curl POST → [attacker]/upload/v2     codecov.sh:207
+          → GITHUB_TOKEN, AWS_*, NPM_TOKEN captured
 
-  Fix: Verify script SHA256 before execution. Pin to git SHA not URL.
+  Fix: Verify SHA256 before execution. Pin to git SHA not URL.
 ────────────────────────────────────────────────────────────────────
 ```
 
 ---
 
-### 4. ua-parser-js Supply Chain (SCA · 7M+ weekly downloads · 2021)
+### 4. ua-parser-js Supply Chain (SCA · 7M+ weekly downloads · Facebook, Microsoft, Amazon · 2021)
 
 > A package used by Facebook, Microsoft, and Amazon was hijacked. For a few hours every `npm install` deployed hidden malware that stole passwords and mined crypto.
 
+**What a traditional scanner sees:**
+```
+$ npm audit && snyk test
+
+  found 0 vulnerabilities
+  ✓ Tested 1 dependency for known issues, no issues found.
+```
+**Why it misses:** Version 0.7.29 had no CVE at time of attack — it was a new, legitimate-looking release. The actual JavaScript code was completely clean. The attack lived entirely in a three-line preinstall hook that downloaded a binary and ran it. No static AST scanner analyses what a downloaded binary does after execution.
+
+**What the chain detector finds:**
 ```
 $ npx vuln-chain-detector scan --target ./node_modules/ua-parser-js --scanner sca
 
-  Analysing install hooks and binary execution...
-
 CHAIN DETECTED ────────────────────────────────────────────────────
-  ID:       CHAIN-uap-001     Pattern: sca-postinstall-download-exec
-  Severity: Critical          Score:   9.6      Hops: 3
+  Severity: Critical    Score: 9.6     Hops: 3
 
   Step 1  SOURCE      package.json preinstall hook         ua-parser-js/package.json:8
-  Step 2  PASSTHROUGH Shell script detects OS              preinstall.js:12
+  Step 2  PASSTHROUGH OS detection → linux/win branch      preinstall.js:12
   Step 3  STORE       Downloads binary → /tmp/jsextension  preinstall.js:28
   Step 4  SINK        execSync('/tmp/jsextension')         preinstall.js:34
-          → crypto miner + password stealer executes
+          → crypto miner + password stealer
 
   Fix: npm install --ignore-scripts. Verify package integrity hash.
 ────────────────────────────────────────────────────────────────────
@@ -357,28 +387,34 @@ CHAIN DETECTED ─────────────────────�
 
 > A hacker asked the bank's server to fetch a web address. The address was Amazon's internal secret URL that hands out cloud credentials. The server helpfully fetched it. 100 million records followed.
 
+**What a traditional scanner sees:**
+```
+$ sonar-scanner -Dsonar.sources=./api-service
+
+  MEDIUM  SSRF — unvalidated URL                   SyncService.java:88
+          Rule: java:S5144 — Make sure URL is trusted
+          Suggested: validate or sanitize the URL parameter
+
+  1 finding · Severity: Medium · Backlog priority
+```
+**Why it misses:** SonarQube correctly flags the unvalidated URL — but at Medium severity, so it sits in the backlog. It has no knowledge that this server runs inside AWS, that `169.254.169.254` is reachable there, or that the response contains IAM credentials granting S3 access to 700 buckets. Static analysis cannot observe runtime network topology. Only DAST reveals the full chain.
+
+**What the chain detector finds:**
 ```
 $ npx vuln-chain-detector scan --target https://api.capitalone-staging.internal --scanner dast
 
-  Probing 34 HTTP endpoints...
-  Injecting SSRF payloads...
-  Monitoring out-of-band callbacks (OAST)...
+  Probing 34 endpoints · Injecting SSRF payloads · Monitoring OAST...
 
 CHAIN DETECTED ────────────────────────────────────────────────────
-  ID:       CHAIN-ssrf-001    Pattern: dast-ssrf-to-aws-metadata
-  Severity: Critical          Score:   9.9      Hops: 4
+  Severity: Critical    Score: 9.9     Hops: 4
 
-  Step 1  SOURCE      POST /v1/sync · body.url param       api-gateway:443
-          → no URL allowlist validation
-  Step 2  PASSTHROUGH url passed to internal fetch()       SyncService.java:88
+  Step 1  SOURCE      POST /v1/sync · body.url             api-gateway:443
+  Step 2  PASSTHROUGH url → internal fetch()               SyncService.java:88
   Step 3  STORE       Server fetches 169.254.169.254        AWS IMDS
           → GET /latest/meta-data/iam/security-credentials/
-  Step 4  SINK        IAM credentials returned + exfil     AWS metadata service
-          → AccessKeyId, SecretAccessKey, Token captured
-          → S3 GetObject on 700+ buckets now accessible
+  Step 4  SINK        IAM creds returned · S3 on 700 buckets
 
-  Fix: Allowlist permitted URL hosts. Block 169.254.0.0/16.
-       Enforce IMDSv2 with session tokens.
+  Fix: Allowlist URL hosts. Block 169.254.0.0/16. Enforce IMDSv2.
 ────────────────────────────────────────────────────────────────────
 ```
 

