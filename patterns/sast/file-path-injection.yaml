@@ -1,0 +1,64 @@
+id: file-path-injection
+name: File Path Command Substitution (POSIX §2.2.3)
+description: >
+  A filename containing shell command substitution syntax $(cmd) or backticks
+  is passed to a shell-invoked editor or file processor. Per POSIX §2.2.3,
+  command substitution inside double quotes evaluates before the outer command.
+  The filename itself becomes an execution vector.
+cwe: CWE-78
+severity: High
+cvss_base: 7.8
+reference_cves:
+  - CVE-2026-35021
+
+source:
+  type: FILE_PATH
+  patterns:
+    - user-supplied filename argument
+    - file paths from directory listings of attacker-controlled directories
+    - file paths embedded in repository contents
+
+transforms:
+  - type: string_concat
+  - type: template_literal
+  - type: passthrough
+
+sanitizers:
+  - path.basename(input)             # strips directory components
+  - input.replace(/[^a-zA-Z0-9._\-]/g, '')   # strict filename allowlist
+
+sink:
+  type: SHELL_EXEC
+  pattern: >
+    Any shell-invoked command that passes a filename as a quoted string argument:
+    execa(`${editor} "${filename}"`, { shell: true })
+    execSync(`open "${filename}"`)
+    exec(`cat "${filename}"`)
+
+session_crossing: false
+user_interaction_required: true      # user must open/process the malicious file
+
+attack_example: |
+  # Attacker creates file with command substitution in filename:
+  touch '/tmp/$(touch /tmp/pwned).txt'
+
+  # Code does:
+  const filename = '/tmp/$(touch /tmp/pwned).txt'
+  execa(`${editor} "${filename}"`, { shell: true })
+  # Shell evaluates $(touch /tmp/pwned) before passing to editor
+  # → /tmp/pwned created
+
+posix_note: >
+  POSIX §2.2.3: Within double-quotes, the shell performs parameter expansion,
+  command substitution, and arithmetic expansion. This means $() and backtick
+  expressions inside double-quoted filename arguments execute before the outer
+  command runs.
+
+fix:
+  description: >
+    Never construct shell commands using string interpolation with file paths.
+    Pass filenames as separate arguments (not shell-interpolated strings).
+  before: |
+    execa(`${editor} "${filename}"`, { shell: true })
+  after: |
+    execa(editor, [filename])         // filename is a literal argument, not shell-parsed

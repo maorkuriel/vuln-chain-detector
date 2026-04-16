@@ -1,0 +1,42 @@
+id: dast-ssrf-to-metadata
+scanner_type: DAST
+name: SSRF to Cloud Metadata Service (Credential Exfiltration)
+description: >
+  User-controlled URL in HTTP request reaches an internal fetch call,
+  allowing the attacker to pivot to cloud metadata endpoints and
+  steal IAM credentials.
+cwe: CWE-918
+severity: Critical
+
+source:
+  type: HTTP_INPUT
+  locations:
+    - req.body.url
+    - req.body.webhook
+    - req.query.target
+    - req.body.endpoint
+
+metadata_targets:
+  aws: http://169.254.169.254/latest/meta-data/iam/security-credentials/
+  gcp: http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token
+  azure: http://169.254.169.254/metadata/identity/oauth2/token
+  alibaba: http://100.100.100.200/latest/meta-data/
+
+test_payloads:
+  - value: "http://169.254.169.254/latest/meta-data/iam/security-credentials/"
+    detection: Response contains IAM role name or credentials
+  - value: "http://[::ffff:169.254.169.254]/latest/meta-data/"
+    detection: IPv6-encoded bypass of naive IP blocklist
+  - value: "http://metadata.internal/"
+    detection: DNS rebinding variant
+  - value: "http://oast.callback.domain/ssrf-probe"
+    detection: OOB callback confirms server-side fetch
+
+chain_with: credential-exfil-chain
+
+dast_approach: |
+  1. Find all endpoints that accept URLs as input
+  2. Test with metadata service IPs directly
+  3. Test bypass variants: IPv6, URL encoding, DNS rebinding, decimal encoding
+  4. Check response for credential patterns (AKIA*, access_token, etc.)
+  5. Test internal network ranges (10.x, 172.16.x, 192.168.x) for lateral movement

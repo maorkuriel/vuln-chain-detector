@@ -1,0 +1,58 @@
+id: env-injection-to-shell
+name: Environment Variable Injection to Shell Execution
+description: >
+  Attacker-controlled environment variable is interpolated into a shell-executed
+  command string without sanitization. Semicolons, backticks, and $() enable
+  arbitrary command chaining.
+cwe: CWE-78
+severity: Critical
+cvss_base: 8.4
+reference_cves:
+  - CVE-2026-35020
+
+source:
+  type: ENV_VAR
+  patterns:
+    - process.env.TERMINAL
+    - process.env.EDITOR
+    - process.env.SHELL
+    - process.env.PAGER
+    - process.env.*                   # any env var that reaches a shell sink
+
+transforms:
+  - type: template_literal            # `which ${input}`
+  - type: string_concat               # 'which ' + input
+  - type: passthrough                 # direct assignment
+
+sanitizers:
+  - shellEscape(input)
+  - shellescape([input])
+  - input.replace(/[^a-zA-Z0-9_\-\.\/]/g, '')   # strict allowlist only
+
+sink:
+  type: SHELL_EXEC
+  patterns:
+    - execa(*, { shell: true })
+    - execSync(string_with_variable)
+    - exec(string_with_variable)
+    - spawn('sh', ['-c', *])
+    - spawn('bash', ['-c', *])
+
+chain_required: false                 # single-hop is still flagged
+session_crossing: false
+
+attack_example: |
+  # Attacker sets in .env or CI variable:
+  TERMINAL='touch /tmp/pwned; echo sk-ant-fake'
+
+  # Code does:
+  execa(`which ${process.env.TERMINAL}`, { shell: true })
+  # Executes: which touch /tmp/pwned; echo sk-ant-fake
+  # → touch /tmp/pwned runs
+
+fix:
+  description: Pass command arguments as an array, never as a shell string
+  before: |
+    execa(`which ${process.env.TERMINAL}`, { shell: true })
+  after: |
+    execa('which', [process.env.TERMINAL])   // no shell expansion, arg is literal

