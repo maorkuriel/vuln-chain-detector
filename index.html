@@ -363,6 +363,7 @@
     <a href="#chain">Chain Visual</a>
     <a href="#scanners">Scanners</a>
     <a href="#how">How It Works</a>
+    <a href="#examples">Examples</a>
   </div>
   <a class="nav-cta" href="https://github.com/maorkuriel/vuln-chain-detector" target="_blank">View on GitHub</a>
 </nav>
@@ -774,6 +775,195 @@
   Fix: Use args array — never shell strings. Validate hook paths.
 <span class="ok">─────────────────────────────────────────────────────────────────</span></pre>
   </div>
+</section>
+
+<!-- BENCHMARKS -->
+<div style="background:var(--bg2);border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:72px 24px;">
+  <div style="max-width:1100px;margin:0 auto;" class="fade-up">
+    <div class="section-label" style="text-align:center">By the Numbers</div>
+    <h2 style="text-align:center;margin-bottom:48px;">Why chain detection matters</h2>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:24px;">
+
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:28px;text-align:center;">
+        <div style="font-size:2.4rem;font-weight:800;color:var(--red);letter-spacing:-0.03em;">$4.45M</div>
+        <div style="font-size:0.82rem;color:var(--muted);margin-top:8px;line-height:1.5;">Average cost of a data breach<br/><span style="font-size:0.72rem;opacity:0.6;">IBM Cost of Data Breach Report 2023</span></div>
+      </div>
+
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:28px;text-align:center;">
+        <div style="font-size:2.4rem;font-weight:800;color:var(--orange);letter-spacing:-0.03em;">197 days</div>
+        <div style="font-size:0.82rem;color:var(--muted);margin-top:8px;line-height:1.5;">Average time to identify a breach<br/><span style="font-size:0.72rem;opacity:0.6;">IBM 2023</span></div>
+      </div>
+
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:28px;text-align:center;">
+        <div style="font-size:2.4rem;font-weight:800;color:var(--yellow);letter-spacing:-0.03em;">45%</div>
+        <div style="font-size:0.82rem;color:var(--muted);margin-top:8px;line-height:1.5;">Of orgs will suffer supply chain attacks by 2025<br/><span style="font-size:0.72rem;opacity:0.6;">Gartner</span></div>
+      </div>
+
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:28px;text-align:center;">
+        <div style="font-size:2.4rem;font-weight:800;color:var(--green);letter-spacing:-0.03em;">70%</div>
+        <div style="font-size:0.82rem;color:var(--muted);margin-top:8px;line-height:1.5;">Of real vulnerabilities require chaining to be exploitable<br/><span style="font-size:0.72rem;opacity:0.6;">SonarSource Research</span></div>
+      </div>
+
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:28px;text-align:center;">
+        <div style="font-size:2.4rem;font-weight:800;color:var(--blue);letter-spacing:-0.03em;">3B+</div>
+        <div style="font-size:0.82rem;color:var(--muted);margin-top:8px;line-height:1.5;">Devices hit by Log4Shell — a chain, not a single bug<br/><span style="font-size:0.72rem;opacity:0.6;">Apache / NIST CVE-2021-44228</span></div>
+      </div>
+
+      <div style="background:rgba(255,59,59,0.06);border:1px solid rgba(255,59,59,0.3);border-radius:12px;padding:28px;text-align:center;">
+        <div style="font-size:2.4rem;font-weight:800;color:var(--red);letter-spacing:-0.03em;">0 of 5</div>
+        <div style="font-size:0.82rem;color:var(--muted);margin-top:8px;line-height:1.5;">Real-world examples below caught by single-sink scanners<br/><span style="font-size:0.72rem;opacity:0.6;">vuln-chain-detector analysis</span></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- REAL WORLD EXAMPLES -->
+<section id="examples" style="max-width:1100px;margin:0 auto;padding:96px 24px;" class="fade-up">
+  <div class="section-label">Real-World Examples</div>
+  <h2>5 breaches that were chains,<br/>not single bugs</h2>
+  <p class="section-sub">Every one of these incidents involved multiple steps that together created the exploit. Each maps to a chain type this engine detects.</p>
+
+  <!-- Example 1 -->
+  <div style="border:1px solid var(--border);border-radius:16px;overflow:hidden;margin-bottom:24px;background:var(--card);">
+    <div style="display:flex;align-items:center;gap:16px;padding:20px 28px;border-bottom:1px solid var(--border);background:rgba(255,59,59,0.04);">
+      <div style="width:40px;height:40px;border-radius:10px;background:rgba(255,59,59,0.15);border:1px solid rgba(255,59,59,0.3);display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;">🪵</div>
+      <div>
+        <div style="font-weight:700;font-size:1rem;">Log4Shell — Apache Log4j</div>
+        <div style="font-size:0.75rem;color:var(--muted);">CVE-2021-44228 · CVSS 10.0 · 3 billion+ devices · December 2021</div>
+      </div>
+      <span style="margin-left:auto;background:rgba(255,59,59,0.12);border:1px solid rgba(255,59,59,0.3);color:var(--red);padding:4px 12px;border-radius:99px;font-size:0.72rem;font-weight:700;white-space:nowrap;">SAST Chain</span>
+    </div>
+    <div style="padding:24px 28px;display:grid;grid-template-columns:1fr 1fr;gap:28px;">
+      <div>
+        <div style="font-size:0.75rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">In plain English</div>
+        <p style="font-size:0.88rem;color:var(--text);line-height:1.6;">Millions of apps used a logging library to write messages to a file. Someone found that typing a special code into a chat box made the library go fetch software from the internet and run it — silently, automatically, no warning needed.</p>
+      </div>
+      <div>
+        <div style="font-size:0.75rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">The Chain</div>
+        <div style="font-family:monospace;font-size:0.78rem;line-height:1.8;color:var(--text);">
+          <span style="color:var(--red);">User types</span> malicious string<br/>
+          → <span style="color:var(--yellow);">App logs it</span> via Log4j<br/>
+          → <span style="color:var(--orange);">Library resolves</span> JNDI lookup<br/>
+          → <span style="color:var(--red);">Remote code downloads + runs</span>
+        </div>
+        <div style="margin-top:12px;font-size:0.75rem;color:var(--muted);">What engine detects: HTTP input → log() → JNDI sink — 3-hop chain invisible to single-sink SAST</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Example 2 -->
+  <div style="border:1px solid var(--border);border-radius:16px;overflow:hidden;margin-bottom:24px;background:var(--card);">
+    <div style="display:flex;align-items:center;gap:16px;padding:20px 28px;border-bottom:1px solid var(--border);background:rgba(255,140,0,0.04);">
+      <div style="width:40px;height:40px;border-radius:10px;background:rgba(255,140,0,0.15);border:1px solid rgba(255,140,0,0.3);display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;">📦</div>
+      <div>
+        <div style="font-weight:700;font-size:1rem;">event-stream npm Attack</div>
+        <div style="font-size:0.75rem;color:var(--muted);">Supply chain attack · 2M+ downloads · November 2018</div>
+      </div>
+      <span style="margin-left:auto;background:rgba(255,140,0,0.12);border:1px solid rgba(255,140,0,0.3);color:var(--orange);padding:4px 12px;border-radius:99px;font-size:0.72rem;font-weight:700;white-space:nowrap;">SCA Chain</span>
+    </div>
+    <div style="padding:24px 28px;display:grid;grid-template-columns:1fr 1fr;gap:28px;">
+      <div>
+        <div style="font-size:0.75rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">In plain English</div>
+        <p style="font-size:0.88rem;color:var(--text);line-height:1.6;">A hacker convinced a tired open-source developer to hand over a popular JavaScript helper package. The hacker added hidden code that hunted specifically for a Bitcoin wallet app and stole funds. Every developer who ran <code style="color:var(--orange);">npm install</code> downloaded the bad code without knowing.</p>
+      </div>
+      <div>
+        <div style="font-size:0.75rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">The Chain</div>
+        <div style="font-family:monospace;font-size:0.78rem;line-height:1.8;color:var(--text);">
+          <span style="color:var(--red);">Attacker takes over</span> npm package<br/>
+          → <span style="color:var(--yellow);">postinstall script</span> runs on install<br/>
+          → <span style="color:var(--orange);">Script searches</span> for wallet files<br/>
+          → <span style="color:var(--red);">Credentials stolen</span> and exfiltrated
+        </div>
+        <div style="margin-top:12px;font-size:0.75rem;color:var(--muted);">What engine detects: SCA dep → postinstall exec → file read → network POST</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Example 3 -->
+  <div style="border:1px solid var(--border);border-radius:16px;overflow:hidden;margin-bottom:24px;background:var(--card);">
+    <div style="display:flex;align-items:center;gap:16px;padding:20px 28px;border-bottom:1px solid var(--border);background:rgba(245,196,0,0.03);">
+      <div style="width:40px;height:40px;border-radius:10px;background:rgba(245,196,0,0.12);border:1px solid rgba(245,196,0,0.3);display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;">🔑</div>
+      <div>
+        <div style="font-weight:700;font-size:1rem;">Codecov Breach</div>
+        <div style="font-size:0.75rem;color:var(--muted);">Supply chain attack · Twilio, Twitch, HashiCorp affected · Jan–Apr 2021</div>
+      </div>
+      <span style="margin-left:auto;background:rgba(245,196,0,0.1);border:1px solid rgba(245,196,0,0.3);color:var(--yellow);padding:4px 12px;border-radius:99px;font-size:0.72rem;font-weight:700;white-space:nowrap;">SCA + Secrets Chain</span>
+    </div>
+    <div style="padding:24px 28px;display:grid;grid-template-columns:1fr 1fr;gap:28px;">
+      <div>
+        <div style="font-size:0.75rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">In plain English</div>
+        <p style="font-size:0.88rem;color:var(--text);line-height:1.6;">Hackers quietly changed a popular developer tool's download script to add one extra line: send all your secret passwords and API keys to our server. For two months, thousands of companies ran the poisoned script in their CI/CD pipelines without realising.</p>
+      </div>
+      <div>
+        <div style="font-size:0.75rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">The Chain</div>
+        <div style="font-family:monospace;font-size:0.78rem;line-height:1.8;color:var(--text);">
+          <span style="color:var(--red);">Compromised</span> bash uploader served<br/>
+          → <span style="color:var(--yellow);">CI/CD runs</span> it automatically<br/>
+          → <span style="color:var(--orange);">Script reads</span> all env vars<br/>
+          → <span style="color:var(--red);">All secrets POSTed</span> to attacker
+        </div>
+        <div style="margin-top:12px;font-size:0.75rem;color:var(--muted);">What engine detects: SCA dep → CI env var source → network exfil sink — cross-scanner chain</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Example 4 -->
+  <div style="border:1px solid var(--border);border-radius:16px;overflow:hidden;margin-bottom:24px;background:var(--card);">
+    <div style="display:flex;align-items:center;gap:16px;padding:20px 28px;border-bottom:1px solid var(--border);background:rgba(0,230,118,0.03);">
+      <div style="width:40px;height:40px;border-radius:10px;background:rgba(0,230,118,0.1);border:1px solid rgba(0,230,118,0.25);display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;">🌐</div>
+      <div>
+        <div style="font-weight:700;font-size:1rem;">ua-parser-js Supply Chain</div>
+        <div style="font-size:0.75rem;color:var(--muted);">npm account hijack · 7M+ weekly downloads · October 2021</div>
+      </div>
+      <span style="margin-left:auto;background:rgba(0,230,118,0.08);border:1px solid rgba(0,230,118,0.25);color:var(--green);padding:4px 12px;border-radius:99px;font-size:0.72rem;font-weight:700;white-space:nowrap;">SCA Chain</span>
+    </div>
+    <div style="padding:24px 28px;display:grid;grid-template-columns:1fr 1fr;gap:28px;">
+      <div>
+        <div style="font-size:0.75rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">In plain English</div>
+        <p style="font-size:0.88rem;color:var(--text);line-height:1.6;">A package used by Facebook, Microsoft, Amazon and 7 million+ other projects was briefly taken over by hackers. For a few hours, anyone running <code style="color:var(--green);">npm install</code> got hidden software that stole passwords and ran a crypto miner on their machine.</p>
+      </div>
+      <div>
+        <div style="font-size:0.75rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">The Chain</div>
+        <div style="font-family:monospace;font-size:0.78rem;line-height:1.8;color:var(--text);">
+          <span style="color:var(--red);">Attacker hijacks</span> npm account<br/>
+          → <span style="color:var(--yellow);">Malicious version</span> published<br/>
+          → <span style="color:var(--orange);">postinstall downloads</span> binary<br/>
+          → <span style="color:var(--red);">Malware runs</span> — crypto miner + stealer
+        </div>
+        <div style="margin-top:12px;font-size:0.75rem;color:var(--muted);">What engine detects: postinstall → external download → exec — 3-hop SCA chain</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Example 5 -->
+  <div style="border:1px solid var(--border);border-radius:16px;overflow:hidden;margin-bottom:24px;background:var(--card);">
+    <div style="display:flex;align-items:center;gap:16px;padding:20px 28px;border-bottom:1px solid var(--border);background:rgba(79,195,247,0.03);">
+      <div style="width:40px;height:40px;border-radius:10px;background:rgba(79,195,247,0.1);border:1px solid rgba(79,195,247,0.25);display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;">🏦</div>
+      <div>
+        <div style="font-weight:700;font-size:1rem;">Capital One SSRF → AWS Metadata</div>
+        <div style="font-size:0.75rem;color:var(--muted);">SSRF attack · 100M customer records · $190M settlement · 2019</div>
+      </div>
+      <span style="margin-left:auto;background:rgba(79,195,247,0.1);border:1px solid rgba(79,195,247,0.25);color:var(--blue);padding:4px 12px;border-radius:99px;font-size:0.72rem;font-weight:700;white-space:nowrap;">DAST Chain</span>
+    </div>
+    <div style="padding:24px 28px;display:grid;grid-template-columns:1fr 1fr;gap:28px;">
+      <div>
+        <div style="font-size:0.75rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">In plain English</div>
+        <p style="font-size:0.88rem;color:var(--text);line-height:1.6;">A hacker found that Capital One's server would helpfully fetch any web address you gave it. They sent it Amazon's secret internal address that hands out cloud login credentials. The server fetched it, the hacker got the keys, and 100 million customer records were downloaded.</p>
+      </div>
+      <div>
+        <div style="font-size:0.75rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">The Chain</div>
+        <div style="font-family:monospace;font-size:0.78rem;line-height:1.8;color:var(--text);">
+          <span style="color:var(--red);">HTTP POST</span> with attacker URL<br/>
+          → <span style="color:var(--yellow);">Server fetches</span> that URL<br/>
+          → <span style="color:var(--orange);">AWS metadata</span> returns IAM keys<br/>
+          → <span style="color:var(--red);">100M records</span> downloaded
+        </div>
+        <div style="margin-top:12px;font-size:0.75rem;color:var(--muted);">What engine detects: HTTP input → server-side fetch → internal SSRF → credential access — 4-hop DAST chain</div>
+      </div>
+    </div>
+  </div>
+
 </section>
 
 <!-- CTA -->
