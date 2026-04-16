@@ -259,5 +259,4 @@ vuln-chain-detector/
 
 ## Attribution
 
-Vulnerability chain reasoning methodology derived from AI-assisted security analysis.
-Original CVE chain analysis: [phoenix.security](https://phoenix.security/claude-code-leak-to-vulnerability-three-cves-in-claude-code-cli-and-the-chain-that-connects-them/)
+Vulnerability chain reasoning methodology derived from AI-assisted security analysis of publicly disclosed CVEs in the Claude Code CLI.

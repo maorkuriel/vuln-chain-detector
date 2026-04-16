@@ -1,7 +1,5 @@
 # Real-World Case Study: Claude Code CLI — Three Chained CVEs
 
-> **Source:** [phoenix.security — Claude Code Leak to Vulnerability](https://phoenix.security/claude-code-leak-to-vulnerability-three-cves-in-claude-code-cli-and-the-chain-that-connects-them/)
->
 > This case study documents the real-world CVE chain that served as the design basis for this engine. The chain demonstrates why single-vulnerability scanners are insufficient for modern CLI tooling security.
 
 ---
