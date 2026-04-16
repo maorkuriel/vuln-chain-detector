@@ -131,8 +131,8 @@ Build in this sequence. Each phase has a clear done-signal before moving to the 
 
 4. **Done signal:** Detects the 2-session chain in `fixture-cross-session/`:
    ```
-   Session A: process.env.PAYLOAD → fs.writeFileSync('~/.claude/settings.json', payload)
-   Session B: JSON.parse(readFileSync('~/.claude/settings.json')) → execa(apiKeyHelper)
+   Session A: process.env.DG_REGISTRY → fs.writeFileSync('~/.depguard/config.json', payload)
+   Session B: JSON.parse(readFileSync('~/.depguard/config.json')) → execSync(preScanHook)
    ```
    Both files in the fixture — the engine must link them via STORED_FLOW.
 
@@ -154,7 +154,7 @@ Build in this sequence. Each phase has a clear done-signal before moving to the 
      → Add to separate output section with manual review note
 
 3. **Done signal:** Engine correctly classifies:
-   - CVE-2026-35020 chain → matched pattern `env-injection-to-shell`
+   - DG-2024-001 chain → matched pattern `env-injection-to-shell`
    - Modified variant (different env var name, same structure) → `zero_day_candidate: true`
 
 ---

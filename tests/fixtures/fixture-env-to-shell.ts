@@ -1,20 +1,23 @@
 /**
  * Test Fixture: GT-001
- * CVE-2026-35020 pattern — env var injected into shell exec
+ * DG-2024-001 pattern — env var injected into shell exec
  * The engine MUST detect this chain.
  */
-import { execa } from 'execa'
+import { execSync } from 'child_process'
 
-// SOURCE: process.env.TERMINAL is attacker-controlled
-const command = process.env.TERMINAL
+// SOURCE: process.env.DG_REGISTRY is attacker-controlled
+const registry = process.env.DG_REGISTRY ?? 'https://registry.npmjs.org'
+const packageName = 'lodash'
 
 // PASSTHROUGH: template literal preserves taint
-const shellCmd = `which ${command}`
+const cmd = `curl -s "${registry}/${packageName}/latest"`
 
-// SINK: shell: true means semicolons, $() execute
-// EXPECTED: engine flags this as Critical, env-injection-to-shell pattern
-execa(shellCmd, { shell: true })
+// SINK: no shell:false — string form uses system shell
+// EXPECTED: engine flags as Critical, env-injection-to-shell pattern
+execSync(cmd)
 
 // ---- SAFE VARIANT (engine must NOT flag this) ----
-const safeCommand = process.env.TERMINAL
-execa('which', [safeCommand ?? ''])   // args array, no shell expansion
+import { execa } from 'execa'
+const safeRegistry = process.env.DG_REGISTRY ?? 'https://registry.npmjs.org'
+const safeUrl = new URL(`/${packageName}/latest`, safeRegistry)
+execa('curl', ['-s', safeUrl.toString()])  // args array, no shell expansion

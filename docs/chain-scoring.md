@@ -61,7 +61,7 @@ More hops = harder to detect and more sophisticated = higher severity for zero-d
 
 ---
 
-## Example Scoring: CVE-2026-35020/22 Chain
+## Example Scoring: depguard-cli DG-2024-001/003 Chain
 
 ```
 Terminal sink: Credential exfiltration        → base 8.5
@@ -69,7 +69,7 @@ Session-crossing STORED_FLOW                  → ×1.5
 No user interaction required                  → ×1.3
 CI/CD context present (.github/)              → ×1.2
 Exfiltration at terminal node                 → ×1.4
-Sandbox fail-open (allowUnsandboxedCommands)  → ×1.25
+Sandbox fail-open (shell default)             → ×1.25
 
 chain_score = 8.5 × 1.5 × 1.3 × 1.2 × 1.4 × 1.25
             = 8.5 × 4.095

