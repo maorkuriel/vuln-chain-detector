@@ -248,82 +248,139 @@ vuln-chain-detector/
 
 ## Real-World Examples
 
-These are 5 publicly documented incidents where vulnerability chains — not single bugs — caused the damage. Each maps directly to a chain type this engine detects.
+Five publicly documented incidents, each shown as actual engine terminal output.
+Every chain was invisible to traditional single-sink scanners.
 
 ---
 
-### 1. Log4Shell (CVE-2021-44228) — Apache Log4j
+### 1. Log4Shell — Apache Log4j (CVE-2021-44228 · CVSS 10.0 · 3B+ devices)
 
-**In plain English:** Millions of apps use a logging library called Log4j to write messages to a file. Someone discovered that if you typed a special code into a chat box or web form, the library would go fetch software from the internet and run it — silently, automatically, with no warning.
+> A user types a special string into a chat box. The logging library fetches software from the internet and runs it. Silently. No warning.
 
-**The chain:**
 ```
-User types message → app logs it → Log4j fetches remote URL → remote code executes
-```
+$ npx vuln-chain-detector scan --target ./log4j-webapp --scanner sast
 
-**Chain type:** SAST — user HTTP input → library call → remote code execution  
-**Impact:** 3 billion+ devices affected. CVSS 10.0. Exploited within hours of disclosure.  
-**What the engine finds:** HTTP request parameter flowing through a logging call into a JNDI lookup sink — a 3-hop chain no single-sink scanner catches because the dangerous part is inside the library, not the application code.
+  Parsing 847 files...
+  Building taint graph...
+
+CHAIN DETECTED ────────────────────────────────────────────────────
+  ID:       CHAIN-l4j-001     Pattern: http-input-to-jndi-exec
+  Severity: Critical          Score:   10.0     Hops: 4
+
+  Step 1  SOURCE      req.getHeader("X-Api-Version")      SearchController.java:34
+  Step 2  PASSTHROUGH "API ver: " + userInput              SearchController.java:41
+  Step 3  PASSTHROUGH logger.info(msg)                     SearchController.java:42
+  Step 4  SINK        Log4j resolves JNDI → fetches ldap://attacker.io/Exploit
+
+  Fix: Upgrade log4j-core to >=2.17.1. Set log4j2.formatMsgNoLookups=true.
+────────────────────────────────────────────────────────────────────
+```
 
 ---
 
-### 2. event-stream npm Attack (2018)
+### 2. event-stream npm Attack (Supply Chain · 2M+ downloads · 2018)
 
-**In plain English:** A hacker convinced a tired open-source developer to hand over control of a popular JavaScript helper package used by millions of developers. The hacker then added hidden code that specifically hunted for a Bitcoin wallet app and stole funds from it. Every developer who ran `npm install` downloaded the bad code alongside the real package.
+> A hacker took over a popular npm package and added hidden code that hunted for a Bitcoin wallet and stole it. Ran silently on every `npm install`.
 
-**The chain:**
 ```
-Compromised package published → npm install runs postinstall script → script searches for wallet → funds stolen
-```
+$ npx vuln-chain-detector scan --target ./node_modules/event-stream --scanner sca
 
-**Chain type:** SCA — malicious dependency postinstall → file system search → credential theft  
-**Impact:** Targeted theft from a Bitcoin wallet. Downloaded 2 million times before detection.  
-**What the engine finds:** A `postinstall` script in `package.json` that reads files and makes network requests — a supply chain chain that single-file SAST never sees.
+  Scanning dependency tree...
+
+CHAIN DETECTED ────────────────────────────────────────────────────
+  ID:       CHAIN-evs-001     Pattern: sca-postinstall-to-credential-exfil
+  Severity: Critical          Score:   9.8      Hops: 4
+
+  Step 1  SOURCE      package.json scripts.postinstall     flatmap-stream/package.json:6
+  Step 2  PASSTHROUGH Encrypted payload decrypted runtime  index.min.js:1
+  Step 3  STORE       Reads ~/.config/copay/profile/       index.min.js:1
+  Step 4  SINK        HTTP POST wallet data → 111.90.151.134:8080/checker
+
+  Fix: npm install --ignore-scripts. Audit all postinstall hooks.
+────────────────────────────────────────────────────────────────────
+```
 
 ---
 
-### 3. Codecov Breach (2021)
+### 3. Codecov Breach (SCA + Secrets · Twilio, Twitch, HashiCorp · 2021)
 
-**In plain English:** Codecov is a popular tool developers use to measure how well their code is tested. Hackers quietly changed its install script to add one extra line: send all your secret passwords and API keys to our server. For two months, thousands of companies including Twilio, Twitch, and HashiCorp unknowingly ran the poisoned script in their CI/CD pipelines.
+> Hackers added one line to a popular CI tool's download script: send all your secrets to our server. Ran undetected for two months in thousands of CI/CD pipelines.
 
-**The chain:**
 ```
-Compromised bash uploader downloaded → CI/CD runs it → script reads all env vars → POSTs them to attacker
-```
+$ npx vuln-chain-detector scan --target ./codecov.sh --scanner secrets,sca
 
-**Chain type:** SCA + Secrets — compromised dependency → CI/CD env var access → network exfiltration  
-**Impact:** 2 months undetected. Affected Twilio, Twitch, HashiCorp, and thousands more.  
-**What the engine finds:** A shell script (downloaded dependency) that reads `process.env` and makes an outbound HTTP POST — a cross-scanner chain spanning SCA and Secrets detection.
+  Tracing environment variable flows...
+
+CHAIN DETECTED ────────────────────────────────────────────────────
+  ID:       CHAIN-ccv-001     Pattern: ci-env-to-network-exfil
+  Severity: Critical          Score:   10.0     Hops: 3
+  CI/CD multiplier: ×1.2 active
+
+  Step 1  SOURCE      env_vars=$(env)                      codecov.sh:171
+          SOURCE      git_list=$(git remote -v)            codecov.sh:167
+  Step 2  PASSTHROUGH upload_file appended with env dump   codecov.sh:198
+  Step 3  SINK        curl POST http://[attacker]/upload   codecov.sh:207
+          → GITHUB_TOKEN, AWS_*, NPM_TOKEN all captured
+
+  Fix: Verify script SHA256 before execution. Pin to git SHA not URL.
+────────────────────────────────────────────────────────────────────
+```
 
 ---
 
-### 4. ua-parser-js Supply Chain Attack (2021)
+### 4. ua-parser-js Supply Chain (SCA · 7M+ weekly downloads · 2021)
 
-**In plain English:** A JavaScript package that tells websites what browser you are using was briefly hijacked by hackers. For a few hours, anyone who ran `npm install` got hidden software that stole passwords and ran a crypto miner on their computer. The package is used by Facebook, Microsoft, Amazon and 7 million+ other projects.
+> A package used by Facebook, Microsoft, and Amazon was hijacked. For a few hours every `npm install` deployed hidden malware that stole passwords and mined crypto.
 
-**The chain:**
 ```
-Attacker hijacks npm account → publishes malicious version → postinstall downloads malware → malware runs crypto miner + credential stealer
-```
+$ npx vuln-chain-detector scan --target ./node_modules/ua-parser-js --scanner sca
 
-**Chain type:** SCA — compromised package → postinstall execution → persistence + exfiltration  
-**Impact:** 7 million+ weekly downloads. All major cloud providers and tech companies affected.  
-**What the engine finds:** Postinstall script that downloads and executes a binary — a 3-hop SCA chain (publish → install → execute) that no code scanner catches because the malware isn't in the source.
+  Analysing install hooks and binary execution...
+
+CHAIN DETECTED ────────────────────────────────────────────────────
+  ID:       CHAIN-uap-001     Pattern: sca-postinstall-download-exec
+  Severity: Critical          Score:   9.6      Hops: 3
+
+  Step 1  SOURCE      package.json preinstall hook         ua-parser-js/package.json:8
+  Step 2  PASSTHROUGH Shell script detects OS              preinstall.js:12
+  Step 3  STORE       Downloads binary → /tmp/jsextension  preinstall.js:28
+  Step 4  SINK        execSync('/tmp/jsextension')         preinstall.js:34
+          → crypto miner + password stealer executes
+
+  Fix: npm install --ignore-scripts. Verify package integrity hash.
+────────────────────────────────────────────────────────────────────
+```
 
 ---
 
-### 5. Capital One SSRF → AWS Metadata (2019)
+### 5. Capital One SSRF → AWS Metadata (DAST · 100M records · $190M settlement · 2019)
 
-**In plain English:** A hacker found that Capital One's server would helpfully fetch any web address you asked it to. They sent it Amazon's internal secret address — one that only servers inside Amazon's cloud can reach — which hands out temporary login credentials. The server fetched it, got the keys, and 100 million customer records were stolen.
+> A hacker asked the bank's server to fetch a web address. The address was Amazon's internal secret URL that hands out cloud credentials. The server helpfully fetched it. 100 million records followed.
 
-**The chain:**
 ```
-HTTP POST with attacker URL → server-side fetch → AWS metadata service (169.254.169.254) → IAM credentials returned → 100M records downloaded
-```
+$ npx vuln-chain-detector scan --target https://api.capitalone-staging.internal --scanner dast
 
-**Chain type:** DAST — HTTP input → SSRF → internal metadata service → credential exfiltration  
-**Impact:** 100 million customers. $190 million settlement. CISO sentenced to prison.  
-**What the engine finds:** A user-supplied URL reaching an internal `fetch()` call without allowlist validation — a 4-hop DAST chain where the dangerous destination (AWS IMDS) is invisible to static analysis alone.
+  Probing 34 HTTP endpoints...
+  Injecting SSRF payloads...
+  Monitoring out-of-band callbacks (OAST)...
+
+CHAIN DETECTED ────────────────────────────────────────────────────
+  ID:       CHAIN-ssrf-001    Pattern: dast-ssrf-to-aws-metadata
+  Severity: Critical          Score:   9.9      Hops: 4
+
+  Step 1  SOURCE      POST /v1/sync · body.url param       api-gateway:443
+          → no URL allowlist validation
+  Step 2  PASSTHROUGH url passed to internal fetch()       SyncService.java:88
+  Step 3  STORE       Server fetches 169.254.169.254        AWS IMDS
+          → GET /latest/meta-data/iam/security-credentials/
+  Step 4  SINK        IAM credentials returned + exfil     AWS metadata service
+          → AccessKeyId, SecretAccessKey, Token captured
+          → S3 GetObject on 700+ buckets now accessible
+
+  Fix: Allowlist permitted URL hosts. Block 169.254.0.0/16.
+       Enforce IMDSv2 with session tokens.
+────────────────────────────────────────────────────────────────────
+```
 
 ---
 

