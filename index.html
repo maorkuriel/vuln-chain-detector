@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>vuln-chain-detector — Chained Vulnerability Detection Engine</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #07080f;
+      --bg2:      #0d0f1a;
+      --bg3:      #12152b;
+      --border:   #1e2340;
+      --red:      #ff3b3b;
+      --orange:   #ff8c00;
+      --yellow:   #f5c400;
+      --green:    #00e676;
+      --blue:     #4fc3f7;
+      --purple:   #b388ff;
+      --text:     #e8eaf6;
+      --muted:    #7986cb;
+      --card:     rgba(255,255,255,0.03);
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    /* ── NAV ── */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 48px;
+      background: rgba(7,8,15,0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-logo { font-size: 0.9rem; font-weight: 700; color: var(--red); letter-spacing: 0.05em; font-family: monospace; }
+    .nav-links { display: flex; gap: 32px; }
+    .nav-links a { color: var(--muted); text-decoration: none; font-size: 0.85rem; transition: color 0.2s; }
+    .nav-links a:hover { color: var(--text); }
+    .nav-cta {
+      background: var(--red); color: #fff; padding: 8px 20px;
+      border-radius: 6px; text-decoration: none; font-size: 0.85rem;
+      font-weight: 600; transition: opacity 0.2s;
+    }
+    .nav-cta:hover { opacity: 0.85; }
+
+    /* ── HERO ── */
+    .hero {
+      min-height: 100vh;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      text-align: center; padding: 120px 24px 80px;
+      position: relative; overflow: hidden;
+    }
+    .hero-grid {
+      position: absolute; inset: 0;
+      background-image:
+        linear-gradient(var(--border) 1px, transparent 1px),
+        linear-gradient(90deg, var(--border) 1px, transparent 1px);
+      background-size: 48px 48px;
+      opacity: 0.4;
+      mask-image: radial-gradient(ellipse 80% 70% at 50% 50%, black 30%, transparent 100%);
+    }
+    .hero-glow {
+      position: absolute; width: 600px; height: 600px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(255,59,59,0.12) 0%, transparent 70%);
+      top: 50%; left: 50%; transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+    .badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: rgba(255,59,59,0.1); border: 1px solid rgba(255,59,59,0.3);
+      color: var(--red); padding: 6px 16px; border-radius: 99px;
+      font-size: 0.78rem; font-weight: 600; letter-spacing: 0.06em;
+      text-transform: uppercase; margin-bottom: 24px; position: relative;
+    }
+    .badge-dot {
+      width: 6px; height: 6px; border-radius: 50%; background: var(--red);
+      animation: pulse 1.8s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.7); }
+    }
+    h1 {
+      font-size: clamp(2.4rem, 6vw, 5rem);
+      font-weight: 800; line-height: 1.1;
+      letter-spacing: -0.03em;
+      position: relative;
+    }
+    h1 span.accent { color: var(--red); }
+    .hero-sub {
+      max-width: 600px; margin: 24px auto 0;
+      color: var(--muted); font-size: 1.1rem; line-height: 1.7;
+      position: relative;
+    }
+    .hero-actions { display: flex; gap: 16px; margin-top: 40px; position: relative; flex-wrap: wrap; justify-content: center; }
+    .btn-primary {
+      background: var(--red); color: #fff;
+      padding: 14px 32px; border-radius: 8px; text-decoration: none;
+      font-weight: 700; font-size: 0.95rem; transition: all 0.2s;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .btn-primary:hover { background: #ff5252; transform: translateY(-1px); box-shadow: 0 8px 24px rgba(255,59,59,0.3); }
+    .btn-secondary {
+      background: var(--card); color: var(--text);
+      padding: 14px 32px; border-radius: 8px; text-decoration: none;
+      font-weight: 600; font-size: 0.95rem; border: 1px solid var(--border);
+      transition: all 0.2s; display: flex; align-items: center; gap: 8px;
+    }
+    .btn-secondary:hover { border-color: var(--muted); transform: translateY(-1px); }
+
+    /* ── STATS ── */
+    .stats {
+      display: flex; justify-content: center; gap: 64px;
+      padding: 48px 24px; border-top: 1px solid var(--border);
+      flex-wrap: wrap;
+    }
+    .stat { text-align: center; }
+    .stat-value { font-size: 2.4rem; font-weight: 800; color: var(--red); letter-spacing: -0.03em; }
+    .stat-label { font-size: 0.82rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-top: 4px; }
+
+    /* ── SECTION ── */
+    section { padding: 96px 24px; max-width: 1100px; margin: 0 auto; }
+    .section-label {
+      font-size: 0.75rem; font-weight: 700; letter-spacing: 0.12em;
+      text-transform: uppercase; color: var(--red); margin-bottom: 12px;
+    }
+    h2 { font-size: clamp(1.8rem, 4vw, 2.8rem); font-weight: 800; line-height: 1.2; letter-spacing: -0.02em; margin-bottom: 16px; }
+    .section-sub { color: var(--muted); font-size: 1.05rem; max-width: 560px; line-height: 1.7; margin-bottom: 48px; }
+
+    /* ── PROBLEM ── */
+    .problem-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+    @media (max-width: 768px) { .problem-grid { grid-template-columns: 1fr; } }
+    .problem-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 12px; padding: 28px;
+      transition: border-color 0.2s;
+    }
+    .problem-card:hover { border-color: var(--muted); }
+    .problem-card .icon { font-size: 1.8rem; margin-bottom: 16px; }
+    .problem-card h3 { font-size: 1rem; font-weight: 700; margin-bottom: 8px; }
+    .problem-card p { font-size: 0.88rem; color: var(--muted); line-height: 1.6; }
+    .problem-card.highlight { border-color: rgba(255,59,59,0.4); background: rgba(255,59,59,0.04); }
+    .problem-card.highlight h3 { color: var(--red); }
+
+    /* ── CHAIN VISUAL ── */
+    .chain-section {
+      background: var(--bg2);
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      padding: 96px 24px;
+    }
+    .chain-section > .inner { max-width: 1100px; margin: 0 auto; }
+
+    .chain-diagram {
+      display: flex; flex-direction: column; align-items: center;
+      gap: 0; margin-top: 56px; position: relative;
+    }
+
+    .chain-row {
+      display: flex; align-items: center; gap: 0; width: 100%; justify-content: center;
+    }
+
+    .chain-node {
+      border-radius: 10px; padding: 14px 22px; text-align: center;
+      font-size: 0.78rem; font-weight: 600; min-width: 170px;
+      border: 1px solid transparent; position: relative; z-index: 1;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .chain-node:hover { transform: scale(1.04); box-shadow: 0 8px 32px rgba(0,0,0,0.4); }
+    .chain-node .node-type {
+      font-size: 0.65rem; letter-spacing: 0.1em; text-transform: uppercase;
+      opacity: 0.7; margin-bottom: 4px;
+    }
+    .chain-node .node-name { font-size: 0.82rem; font-weight: 700; }
+    .chain-node .node-loc { font-size: 0.68rem; opacity: 0.6; margin-top: 2px; font-family: monospace; }
+
+    .node-source { background: rgba(255,59,59,0.12); border-color: rgba(255,59,59,0.5); color: #ff8080; }
+    .node-pass   { background: rgba(245,196,0,0.10); border-color: rgba(245,196,0,0.4);  color: #f5e060; }
+    .node-sink   { background: rgba(255,59,59,0.18); border-color: var(--red);            color: var(--red); }
+    .node-store  { background: rgba(255,140,0,0.12); border-color: rgba(255,140,0,0.5);  color: var(--orange); }
+    .node-load   { background: rgba(255,140,0,0.12); border-color: rgba(255,140,0,0.5);  color: var(--orange); }
+    .node-exfil  { background: rgba(136,0,0,0.3);    border-color: #880000;              color: #ff6060; }
+
+    .chain-arrow {
+      display: flex; flex-direction: column; align-items: center;
+      padding: 4px 0; position: relative;
+    }
+    .arrow-line {
+      width: 2px; height: 32px;
+      background: linear-gradient(to bottom, var(--border), var(--muted));
+    }
+    .arrow-label {
+      font-size: 0.62rem; color: var(--muted); letter-spacing: 0.06em;
+      text-transform: uppercase; white-space: nowrap;
+      background: var(--bg2); padding: 1px 6px; border-radius: 3px;
+      position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+    }
+    .arrow-head {
+      width: 0; height: 0;
+      border-left: 5px solid transparent;
+      border-right: 5px solid transparent;
+      border-top: 7px solid var(--muted);
+    }
+
+    .session-divider {
+      display: flex; align-items: center; gap: 16px;
+      width: 100%; max-width: 540px; margin: 8px 0;
+    }
+    .session-line { flex: 1; height: 1px; background: linear-gradient(to right, transparent, var(--red), transparent); }
+    .session-label {
+      font-size: 0.68rem; color: var(--red); letter-spacing: 0.12em;
+      text-transform: uppercase; white-space: nowrap; font-weight: 700;
+      padding: 4px 12px; border: 1px solid rgba(255,59,59,0.3);
+      border-radius: 99px; background: rgba(255,59,59,0.06);
+      animation: flash 2.4s infinite;
+    }
+    @keyframes flash {
+      0%, 100% { opacity: 1; } 50% { opacity: 0.5; }
+    }
+
+    /* ── SCANNER MATRIX ── */
+    .scanner-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;
+    }
+    @media (max-width: 768px) { .scanner-grid { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 480px) { .scanner-grid { grid-template-columns: 1fr; } }
+
+    .scanner-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 12px; padding: 24px;
+      transition: all 0.2s;
+    }
+    .scanner-card:hover { border-color: var(--blue); background: rgba(79,195,247,0.04); }
+    .scanner-card .sc-type {
+      font-size: 0.7rem; font-weight: 700; letter-spacing: 0.12em;
+      text-transform: uppercase; color: var(--blue); margin-bottom: 10px;
+    }
+    .scanner-card h3 { font-size: 0.95rem; font-weight: 700; margin-bottom: 8px; }
+    .scanner-card p { font-size: 0.82rem; color: var(--muted); line-height: 1.5; }
+    .chain-badge {
+      display: inline-block; margin-top: 10px;
+      font-size: 0.68rem; color: var(--green);
+      background: rgba(0,230,118,0.08); border: 1px solid rgba(0,230,118,0.2);
+      padding: 2px 8px; border-radius: 99px;
+    }
+
+    /* ── HOW IT WORKS ── */
+    .steps { display: flex; flex-direction: column; gap: 0; position: relative; }
+    .steps::before {
+      content: ''; position: absolute; left: 23px; top: 24px; bottom: 24px;
+      width: 2px; background: linear-gradient(to bottom, var(--red), var(--orange), var(--yellow));
+    }
+    .step { display: flex; gap: 24px; padding: 0 0 40px; }
+    .step-num {
+      width: 48px; height: 48px; border-radius: 50%; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 0.9rem; border: 2px solid;
+      position: relative; z-index: 1;
+    }
+    .step:nth-child(1) .step-num { background: rgba(255,59,59,0.1); border-color: var(--red); color: var(--red); }
+    .step:nth-child(2) .step-num { background: rgba(255,140,0,0.1); border-color: var(--orange); color: var(--orange); }
+    .step:nth-child(3) .step-num { background: rgba(245,196,0,0.1); border-color: var(--yellow); color: var(--yellow); }
+    .step:nth-child(4) .step-num { background: rgba(0,230,118,0.1); border-color: var(--green); color: var(--green); }
+    .step:nth-child(5) .step-num { background: rgba(79,195,247,0.1); border-color: var(--blue); color: var(--blue); }
+    .step:nth-child(6) .step-num { background: rgba(179,136,255,0.1); border-color: var(--purple); color: var(--purple); }
+    .step-body { padding-top: 10px; }
+    .step-body h3 { font-size: 1rem; font-weight: 700; margin-bottom: 6px; }
+    .step-body p { font-size: 0.88rem; color: var(--muted); line-height: 1.6; max-width: 580px; }
+
+    /* ── CODE BLOCK ── */
+    .code-block {
+      background: #0a0c14; border: 1px solid var(--border);
+      border-radius: 10px; padding: 24px; margin-top: 48px;
+      font-family: 'Fira Code', 'Cascadia Code', monospace;
+      font-size: 0.8rem; line-height: 1.7; overflow-x: auto;
+    }
+    .code-block .cb-header {
+      display: flex; align-items: center; gap: 8px;
+      margin-bottom: 16px; padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .dot { width: 10px; height: 10px; border-radius: 50%; }
+    .dot.r { background: #ff5f57; }
+    .dot.y { background: #ffbd2e; }
+    .dot.g { background: #28ca41; }
+    .cb-title { color: var(--muted); font-size: 0.75rem; margin-left: auto; }
+    .kw { color: #b388ff; }
+    .str { color: #80cbc4; }
+    .cmt { color: #546e7a; font-style: italic; }
+    .fn { color: #82b1ff; }
+    .num { color: #f48fb1; }
+    .err { color: var(--red); }
+    .ok  { color: var(--green); }
+    .sep { color: var(--orange); font-weight: 700; }
+
+    /* ── SCORE VISUAL ── */
+    .score-ring-wrap {
+      display: flex; justify-content: center; align-items: center; gap: 64px;
+      flex-wrap: wrap; margin-top: 48px;
+    }
+    .score-ring {
+      position: relative; width: 160px; height: 160px;
+      display: flex; align-items: center; justify-content: center;
+      flex-direction: column;
+    }
+    .score-ring svg { position: absolute; top: 0; left: 0; transform: rotate(-90deg); }
+    .score-ring-val { font-size: 2.2rem; font-weight: 800; position: relative; z-index: 1; }
+    .score-ring-label { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; position: relative; z-index: 1; }
+    .multipliers { display: flex; flex-direction: column; gap: 12px; }
+    .mult-row { display: flex; align-items: center; gap: 12px; }
+    .mult-tag {
+      font-size: 0.72rem; font-weight: 600; padding: 3px 10px;
+      border-radius: 4px; white-space: nowrap;
+    }
+    .mult-active { background: rgba(255,59,59,0.12); color: var(--red); border: 1px solid rgba(255,59,59,0.3); }
+    .mult-bar-wrap { flex: 1; height: 6px; background: var(--bg3); border-radius: 99px; overflow: hidden; }
+    .mult-bar { height: 100%; border-radius: 99px; }
+
+    /* ── CTA ── */
+    .cta-section {
+      background: linear-gradient(135deg, rgba(255,59,59,0.08) 0%, rgba(7,8,15,0) 50%, rgba(79,195,247,0.05) 100%);
+      border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+      padding: 96px 24px; text-align: center;
+    }
+    .cta-section h2 { font-size: clamp(1.8rem, 4vw, 3rem); margin-bottom: 16px; }
+    .cta-section p { color: var(--muted); max-width: 520px; margin: 0 auto 40px; font-size: 1.05rem; }
+
+    /* ── FOOTER ── */
+    footer {
+      padding: 40px 48px; border-top: 1px solid var(--border);
+      display: flex; justify-content: space-between; align-items: center;
+      color: var(--muted); font-size: 0.82rem; flex-wrap: wrap; gap: 16px;
+    }
+    footer a { color: var(--muted); text-decoration: none; }
+    footer a:hover { color: var(--text); }
+
+    /* ── FULL-WIDTH HELPER ── */
+    .full-width { max-width: 100%; }
+
+    /* ── SCROLL ANIMATIONS ── */
+    .fade-up { opacity: 0; transform: translateY(24px); transition: opacity 0.6s, transform 0.6s; }
+    .fade-up.visible { opacity: 1; transform: none; }
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-logo">⬡ vuln-chain-detector</div>
+  <div class="nav-links">
+    <a href="#problem">Problem</a>
+    <a href="#chain">Chain Visual</a>
+    <a href="#scanners">Scanners</a>
+    <a href="#how">How It Works</a>
+  </div>
+  <a class="nav-cta" href="https://github.com/maorkuriel/vuln-chain-detector" target="_blank">View on GitHub</a>
+</nav>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-grid"></div>
+  <div class="hero-glow"></div>
+
+  <div class="badge"><span class="badge-dot"></span> Open Source Security Engine</div>
+
+  <h1>
+    Stop scanning<br/>
+    <span class="accent">individual vulnerabilities.</span><br/>
+    Start detecting chains.
+  </h1>
+
+  <p class="hero-sub">
+    Most SAST tools flag one dangerous function call and move on.
+    Attackers chain three medium findings into a Critical 10.0 exploit.
+    <strong style="color:var(--text)">vuln-chain-detector</strong> closes that gap.
+  </p>
+
+  <div class="hero-actions">
+    <a class="btn-primary" href="https://github.com/maorkuriel/vuln-chain-detector" target="_blank">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      GitHub Repository
+    </a>
+    <a class="btn-secondary" href="#chain">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      See the Attack Chain
+    </a>
+  </div>
+</div>
+
+<!-- STATS -->
+<div class="stats">
+  <div class="stat">
+    <div class="stat-value">10.0</div>
+    <div class="stat-label">Max chain score detected</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value">6</div>
+    <div class="stat-label">Scanner types covered</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value">3-hop</div>
+    <div class="stat-label">Cross-session chains found</div>
+  </div>
+  <div class="stat">
+    <div class="stat-value">0</div>
+    <div class="stat-label">User interaction required</div>
+  </div>
+</div>
+
+<!-- PROBLEM -->
+<section id="problem" class="fade-up">
+  <div class="section-label">The Problem</div>
+  <h2>Single-vuln scanners miss<br/>the most dangerous attacks</h2>
+  <p class="section-sub">
+    Modern exploits don't look like a single dangerous function call. They're chains —
+    three medium findings, each harmless alone, combined into a Critical 10.0 exploit
+    that exfiltrates credentials before you know it happened.
+  </p>
+
+  <div class="problem-grid">
+    <div class="problem-card highlight">
+      <div class="icon">🔗</div>
+      <h3>Chains are invisible to traditional SAST</h3>
+      <p>A single unvalidated env var scores CVSS 4.0. That same env var, three hops later writing to a config file executed next session — that's a 10.0. Traditional tools never connect those dots.</p>
+    </div>
+    <div class="problem-card highlight">
+      <div class="icon">⏱</div>
+      <h3>Session-crossing flows aren't tracked</h3>
+      <p>Tainted data written to <code style="color:var(--orange)">~/.config/tool.json</code> in one process and executed in the next is invisible to any scanner that stops at a single file or execution context.</p>
+    </div>
+    <div class="problem-card">
+      <div class="icon">🎯</div>
+      <h3>Individual CVSSs tell the wrong story</h3>
+      <p>Three "High" findings stay in the backlog forever. The same three findings, scored as a chain with a session-crossing persistence vector, demand immediate P0 response.</p>
+    </div>
+    <div class="problem-card">
+      <div class="icon">🤖</div>
+      <h3>CI/CD amplifies everything</h3>
+      <p>No human reviews CI output. Credential exfiltration runs silently. All environment variables — including secrets — are in scope. The same chain that scores 8.4 on a laptop scores 9.9 in CI/CD.</p>
+    </div>
+  </div>
+</section>
+
+<!-- CHAIN VISUAL -->
+<div class="chain-section" id="chain">
+  <div class="inner">
+    <div class="fade-up">
+      <div class="section-label">Attack Chain Visualization</div>
+      <h2>How a 3-medium chain becomes<br/>a Critical 10.0 exploit</h2>
+      <p class="section-sub">
+        The <strong>depguard-cli</strong> illustrative example: environment variable injection chains through a cross-session config write into silent credential exfiltration on every subsequent run.
+      </p>
+    </div>
+
+    <div class="chain-diagram fade-up">
+
+      <!-- Session A label -->
+      <div style="align-self:flex-start; font-size:0.7rem; color:var(--muted); letter-spacing:0.1em; text-transform:uppercase; margin-bottom:8px; padding-left:8px;">
+        Session A &nbsp;·&nbsp; Attacker-controlled environment
+      </div>
+
+      <!-- Node: SOURCE -->
+      <div class="chain-node node-source">
+        <div class="node-type">Source</div>
+        <div class="node-name">process.env.DG_REGISTRY</div>
+        <div class="node-loc">resolver.ts:6 · DG-2024-001</div>
+      </div>
+
+      <div class="chain-arrow">
+        <div class="arrow-line"></div>
+        <div class="arrow-label">DIRECT_FLOW</div>
+        <div class="arrow-head"></div>
+      </div>
+
+      <!-- Node: PASSTHROUGH -->
+      <div class="chain-node node-pass">
+        <div class="node-type">Passthrough</div>
+        <div class="node-name">Template literal interpolation</div>
+        <div class="node-loc">curl -s registry/pkg/latest</div>
+      </div>
+
+      <div class="chain-arrow">
+        <div class="arrow-line"></div>
+        <div class="arrow-label">TRANSFORM_FLOW</div>
+        <div class="arrow-head"></div>
+      </div>
+
+      <!-- Node: SINK 1 -->
+      <div class="chain-node node-sink">
+        <div class="node-type">⚠ Sink 1 — OS Command Injection</div>
+        <div class="node-name">execSync(cmd)</div>
+        <div class="node-loc">resolver.ts:10 · CVSS 8.2</div>
+      </div>
+
+      <div class="chain-arrow">
+        <div class="arrow-line" style="background:linear-gradient(to bottom,var(--red),var(--orange))"></div>
+        <div class="arrow-label" style="color:var(--orange)">Payload executes</div>
+        <div class="arrow-head" style="border-top-color:var(--orange)"></div>
+      </div>
+
+      <!-- Node: STORE -->
+      <div class="chain-node node-store">
+        <div class="node-type">Store · Persistence</div>
+        <div class="node-name">fs.writeFileSync config.json</div>
+        <div class="node-loc">~/.depguard/config.json · preScanHook injected</div>
+      </div>
+
+      <!-- SESSION BOUNDARY -->
+      <div class="chain-arrow" style="height:16px">
+        <div class="arrow-line" style="height:16px;background:transparent"></div>
+      </div>
+
+      <div class="session-divider">
+        <div class="session-line"></div>
+        <div class="session-label">⚡ Session Boundary — STORED_FLOW ⚡</div>
+        <div class="session-line"></div>
+      </div>
+
+      <!-- Session B label -->
+      <div style="align-self:flex-start; font-size:0.7rem; color:var(--muted); letter-spacing:0.1em; text-transform:uppercase; margin-top:8px; margin-bottom:8px; padding-left:8px;">
+        Session B &nbsp;·&nbsp; Every subsequent scan
+      </div>
+
+      <!-- Node: LOAD -->
+      <div class="chain-node node-load">
+        <div class="node-type">Load · Cross-Session</div>
+        <div class="node-name">JSON.parse readFileSync</div>
+        <div class="node-loc">config.json loaded at startup · taint inherited</div>
+      </div>
+
+      <div class="chain-arrow">
+        <div class="arrow-line"></div>
+        <div class="arrow-label">STORED_FLOW</div>
+        <div class="arrow-head"></div>
+      </div>
+
+      <!-- Node: PASSTHROUGH 2 -->
+      <div class="chain-node node-pass">
+        <div class="node-type">Passthrough</div>
+        <div class="node-name">config.preScanHook</div>
+        <div class="node-loc">taint propagated from config load</div>
+      </div>
+
+      <div class="chain-arrow">
+        <div class="arrow-line"></div>
+        <div class="arrow-label">CALL_FLOW</div>
+        <div class="arrow-head"></div>
+      </div>
+
+      <!-- Node: SINK 2 -->
+      <div class="chain-node node-sink">
+        <div class="node-type">⚠ Sink 2 — Persistent RCE</div>
+        <div class="node-name">execSync(config.preScanHook)</div>
+        <div class="node-loc">config.ts:24 · DG-2024-003 · CVSS 9.1 in CI/CD</div>
+      </div>
+
+      <div class="chain-arrow">
+        <div class="arrow-line" style="background:linear-gradient(to bottom,var(--red),#880000)"></div>
+        <div class="arrow-label" style="color:var(--red)">Exfil executes silently</div>
+        <div class="arrow-head" style="border-top-color:#880000"></div>
+      </div>
+
+      <!-- Node: EXFIL -->
+      <div class="chain-node node-exfil">
+        <div class="node-type">💀 Exfiltration</div>
+        <div class="node-name">curl POST attacker · ~/.aws/credentials · ~/.ssh/id_rsa</div>
+        <div class="node-loc">All CI/CD env vars · No output · No warning</div>
+      </div>
+
+      <!-- Score pill -->
+      <div style="margin-top:32px; display:flex; gap:16px; flex-wrap:wrap; justify-content:center;">
+        <span style="background:rgba(255,59,59,0.15);border:1px solid var(--red);color:var(--red);padding:6px 18px;border-radius:99px;font-size:0.78rem;font-weight:700;">Chain Score: 10.0 Critical</span>
+        <span style="background:rgba(255,140,0,0.12);border:1px solid var(--orange);color:var(--orange);padding:6px 18px;border-radius:99px;font-size:0.78rem;font-weight:700;">Session-Crossing: YES</span>
+        <span style="background:rgba(0,230,118,0.1);border:1px solid var(--green);color:var(--green);padding:6px 18px;border-radius:99px;font-size:0.78rem;font-weight:700;">User Interaction: NONE</span>
+        <span style="background:rgba(79,195,247,0.1);border:1px solid var(--blue);color:var(--blue);padding:6px 18px;border-radius:99px;font-size:0.78rem;font-weight:700;">Hops: 6</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SCORING -->
+<section id="scoring" class="fade-up">
+  <div class="section-label">Chain Scoring</div>
+  <h2>Score the chain, not the finding</h2>
+  <p class="section-sub">
+    Chain scoring is modeled on CVSS 3.1 but extended for multi-hop properties.
+    Session-crossing flows, CI/CD context, and exfiltration sinks apply multipliers
+    that reflect the true blast radius.
+  </p>
+
+  <div class="score-ring-wrap">
+    <div class="score-ring">
+      <svg width="160" height="160" viewBox="0 0 160 160">
+        <circle cx="80" cy="80" r="68" fill="none" stroke="var(--border)" stroke-width="10"/>
+        <circle cx="80" cy="80" r="68" fill="none" stroke="var(--red)" stroke-width="10"
+          stroke-dasharray="427" stroke-dashoffset="0"
+          stroke-linecap="round"/>
+      </svg>
+      <div class="score-ring-val" style="color:var(--red)">10.0</div>
+      <div class="score-ring-label">Final Score</div>
+    </div>
+
+    <div class="multipliers">
+      <div style="font-size:0.8rem;color:var(--muted);margin-bottom:8px;">Score breakdown · DG-2024-001/003 chain</div>
+
+      <div class="mult-row">
+        <div class="mult-tag mult-active">Base sink (credential exfil)</div>
+        <div class="mult-bar-wrap"><div class="mult-bar" style="width:85%;background:var(--red)"></div></div>
+        <div style="font-size:0.75rem;color:var(--muted);width:36px;text-align:right;">8.5</div>
+      </div>
+      <div class="mult-row">
+        <div class="mult-tag mult-active">× Session-crossing STORED_FLOW</div>
+        <div class="mult-bar-wrap"><div class="mult-bar" style="width:75%;background:var(--orange)"></div></div>
+        <div style="font-size:0.75rem;color:var(--muted);width:36px;text-align:right;">×1.5</div>
+      </div>
+      <div class="mult-row">
+        <div class="mult-tag mult-active">× No user interaction</div>
+        <div class="mult-bar-wrap"><div class="mult-bar" style="width:65%;background:var(--yellow)"></div></div>
+        <div style="font-size:0.75rem;color:var(--muted);width:36px;text-align:right;">×1.3</div>
+      </div>
+      <div class="mult-row">
+        <div class="mult-tag mult-active">× CI/CD context detected</div>
+        <div class="mult-bar-wrap"><div class="mult-bar" style="width:60%;background:var(--blue)"></div></div>
+        <div style="font-size:0.75rem;color:var(--muted);width:36px;text-align:right;">×1.2</div>
+      </div>
+      <div class="mult-row">
+        <div class="mult-tag mult-active">× Exfiltration at terminal node</div>
+        <div class="mult-bar-wrap"><div class="mult-bar" style="width:70%;background:var(--purple)"></div></div>
+        <div style="font-size:0.75rem;color:var(--muted);width:36px;text-align:right;">×1.4</div>
+      </div>
+      <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);font-size:0.8rem;color:var(--muted);">
+        Raw: 8.5 × 1.5 × 1.3 × 1.2 × 1.4 × 1.25 = 34.8 → <strong style="color:var(--red)">capped at 10.0</strong>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SCANNERS -->
+<section id="scanners" class="fade-up" style="background:var(--bg2);max-width:100%;padding:96px 24px;border-top:1px solid var(--border);border-bottom:1px solid var(--border)">
+  <div style="max-width:1100px;margin:0 auto">
+    <div class="section-label">Coverage</div>
+    <h2>All scanner types. One chain graph.</h2>
+    <p class="section-sub">
+      The engine merges findings across SAST, SCA, DAST, IAST, Secrets, and Container scanning
+      into a single taint graph. Chains can cross scanner type boundaries.
+    </p>
+
+    <div class="scanner-grid">
+      <div class="scanner-card">
+        <div class="sc-type">SAST</div>
+        <h3>Static Code Analysis</h3>
+        <p>Traces tainted env vars, CLI args, and file reads through template literals and assignments to shell exec sinks. Detects cross-file and cross-session flows.</p>
+        <span class="chain-badge">Cross-session STORED_FLOW</span>
+      </div>
+      <div class="scanner-card">
+        <div class="sc-type">SCA</div>
+        <h3>Software Composition Analysis</h3>
+        <p>Detects vulnerable dependency versions, traces their exported methods into application code sinks. Flags malicious postinstall scripts in supply chain attacks.</p>
+        <span class="chain-badge">Dep → App code → Exec</span>
+      </div>
+      <div class="scanner-card">
+        <div class="sc-type">DAST</div>
+        <h3>Dynamic / Runtime Testing</h3>
+        <p>Injects payloads into HTTP parameters, monitors out-of-band callbacks (OAST). Detects SSRF to cloud metadata endpoints for credential theft chains.</p>
+        <span class="chain-badge">HTTP → SSRF → IMDS</span>
+      </div>
+      <div class="scanner-card">
+        <div class="sc-type">IAST</div>
+        <h3>Interactive Instrumentation</h3>
+        <p>Runtime taint propagation via OpenTelemetry hooks. Confirms SAST findings and finds chains that cross dynamic dispatch boundaries invisible to static analysis.</p>
+        <span class="chain-badge">Runtime confirmation</span>
+      </div>
+      <div class="scanner-card">
+        <div class="sc-type">Secrets</div>
+        <h3>Secrets Detection</h3>
+        <p>Entropy + pattern-based detection for hardcoded tokens. Traces secret values from source files and config into network exfiltration sinks. Scans git history.</p>
+        <span class="chain-badge">Secret → Network exfil</span>
+      </div>
+      <div class="scanner-card">
+        <div class="sc-type">Container</div>
+        <h3>Container / IaC</h3>
+        <p>Traces Docker ARG through ENV into ENTRYPOINT/CMD. Detects Helm values flowing into container command args. Flags plaintext secrets in manifests.</p>
+        <span class="chain-badge">ARG → ENV → ENTRYPOINT</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section id="how" class="fade-up">
+  <div class="section-label">How It Works</div>
+  <h2>Six phases from source code<br/>to chain finding</h2>
+  <p class="section-sub">The engine builds a directed taint graph across all files and sessions, then runs chain discovery to surface paths no single-sink scanner would find.</p>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <h3>AST Parsing</h3>
+        <p>Parse all files in the target project using tree-sitter or Babel. Extract function calls, assignments, imports, and property accesses that match source and sink patterns.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <h3>Source & Sink Enumeration</h3>
+        <p>Catalog every untrusted input (SOURCE) and every dangerous execution point (SINK). Each scanner adapter contributes its own source/sink patterns to the unified graph.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <h3>Intra-file Taint Tracking</h3>
+        <p>For each source, follow all assignments, template literals, and function calls within the same file. Track which variables carry tainted data toward sinks.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <h3>Cross-Session Flow Resolution</h3>
+        <p>Detect <code style="color:var(--orange)">fs.writeFile</code> calls to sensitive config paths (STORE nodes). Match them to <code style="color:var(--orange)">fs.readFile</code> calls on the same paths (LOAD nodes). Create STORED_FLOW edges across session boundaries — this is the core capability that makes chain detection possible.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">5</div>
+      <div class="step-body">
+        <h3>Chain Discovery</h3>
+        <p>Run depth-first search from every SOURCE node through the taint graph. Record all paths that reach a SINK without passing through a SANITIZE node. Chains of 3+ hops with session-crossing flows are flagged as high-priority.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">6</div>
+      <div class="step-body">
+        <h3>Score, Classify & Emit</h3>
+        <p>Score each chain using the multiplier formula. Chains with no matching pattern in the library and a score ≥ 7.0 are flagged as zero-day candidates. Output in SARIF 2.1.0 for direct integration with GitHub Code Scanning, Snyk, and Jira.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Terminal output -->
+  <div class="code-block">
+    <div class="cb-header">
+      <div class="dot r"></div><div class="dot y"></div><div class="dot g"></div>
+      <div class="cb-title">Engine output — terminal</div>
+    </div>
+<pre><span class="ok">CHAIN DETECTED</span> ────────────────────────────────────────────────
+  ID:               <span class="str">CHAIN-dg-001</span>
+  Pattern:          <span class="str">credential-exfil-chain</span>
+  Severity:         <span class="err">Critical</span>
+  Score:            <span class="err">10.0</span>
+  Hops:             <span class="num">6</span>
+  Session-crossing: <span class="err">YES</span>
+  User interaction: <span class="ok">NOT REQUIRED</span>
+  Zero-day:         <span class="ok">NO</span> <span class="cmt">(matched pattern)</span>
+
+  Step 1  <span class="kw">SOURCE     </span>  process.env.DG_REGISTRY        <span class="cmt">resolver.ts:6</span>
+  Step 2  <span class="kw">PASSTHROUGH</span>  template literal               <span class="cmt">resolver.ts:10</span>
+  Step 3  <span class="err">SINK ①    </span>  execSync(cmd)                  <span class="cmt">resolver.ts:10</span>
+  Step 4  <span class="sep">STORE      </span>  writeFileSync config.json      <span class="cmt">[Session A]</span>
+  Step 5  <span class="sep">LOAD       </span>  JSON.parse readFileSync        <span class="cmt">[Session B]</span>
+  Step 6  <span class="err">SINK ②    </span>  execSync(config.preScanHook)   <span class="cmt">config.ts:24</span>
+
+  Fix: Use args array — never shell strings. Validate hook paths.
+<span class="ok">─────────────────────────────────────────────────────────────────</span></pre>
+  </div>
+</section>
+
+<!-- CTA -->
+<div class="cta-section">
+  <div class="section-label" style="text-align:center;margin-bottom:16px;">Open Source</div>
+  <h2>Start detecting chains today</h2>
+  <p>The engine, pattern library, ground-truth test fixtures, and full engineering instructions are open source. Fork it, extend it, integrate it.</p>
+  <div class="hero-actions" style="justify-content:center">
+    <a class="btn-primary" href="https://github.com/maorkuriel/vuln-chain-detector" target="_blank">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      View on GitHub
+    </a>
+    <a class="btn-secondary" href="https://github.com/maorkuriel/vuln-chain-detector/blob/main/docs/eng-instructions.md" target="_blank">
+      Read the Eng Guide
+    </a>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<footer>
+  <div>⬡ vuln-chain-detector · MIT License</div>
+  <div style="display:flex;gap:24px;">
+    <a href="https://github.com/maorkuriel/vuln-chain-detector">GitHub</a>
+    <a href="https://github.com/maorkuriel/vuln-chain-detector/blob/main/docs/architecture.md">Architecture</a>
+    <a href="https://github.com/maorkuriel/vuln-chain-detector/blob/main/examples/real-world-case-study.md">Case Study</a>
+  </div>
+</footer>
+
+<script>
+  // Scroll fade-in
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        e.target.classList.add('visible');
+        observer.unobserve(e.target);
+      }
+    });
+  }, { threshold: 0.1 });
+  document.querySelectorAll('.fade-up').forEach(el => observer.observe(el));
+
+  // Animate score ring on scroll
+  const ring = document.querySelector('.score-ring circle:last-child');
+  if (ring) {
+    const ringObserver = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting) {
+        ring.style.transition = 'stroke-dashoffset 1.4s cubic-bezier(0.4,0,0.2,1)';
+        ring.style.strokeDashoffset = '43'; // ~10% gap = ~90% fill
+        ringObserver.disconnect();
+      }
+    }, { threshold: 0.5 });
+    ringObserver.observe(ring.closest('.score-ring'));
+  }
+
+  // Animate multiplier bars on scroll
+  document.querySelectorAll('.mult-bar').forEach(bar => {
+    const savedWidth = bar.style.width;
+    bar.style.width = '0';
+    const barObserver = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting) {
+        bar.style.transition = 'width 0.8s cubic-bezier(0.4,0,0.2,1)';
+        bar.style.width = savedWidth;
+        barObserver.disconnect();
+      }
+    }, { threshold: 0.5 });
+    barObserver.observe(bar);
+  });
+</script>
+</body>
+</html>
